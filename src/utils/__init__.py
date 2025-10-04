@@ -5,6 +5,4 @@
 
 from .pdf_utils import PDFInstaller
 
-__all__ = [
-    'PDFInstaller'
-]
+__all__ = ["PDFInstaller"]

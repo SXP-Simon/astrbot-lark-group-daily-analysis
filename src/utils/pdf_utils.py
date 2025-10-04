@@ -20,10 +20,14 @@ class PDFInstaller:
             # 使用asyncio安装pyppeteer和兼容的websockets版本
             logger.info("安装 pyppeteer==1.0.2 和兼容的依赖...")
             process = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "pip", "install",
-                "pyppeteer==1.0.2", "websockets==10.4",
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "pyppeteer==1.0.2",
+                "websockets==10.4",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
 
             stdout, stderr = await process.communicate()

@@ -6,8 +6,8 @@ including client management, message fetching, parsing, and user information ret
 """
 
 __all__ = [
-    'LarkClientManager',
-    'MessageFetcher',
-    'MessageParser',
-    'UserInfoCache',
+    "LarkClientManager",
+    "MessageFetcher",
+    "MessageParser",
+    "UserInfoCache",
 ]

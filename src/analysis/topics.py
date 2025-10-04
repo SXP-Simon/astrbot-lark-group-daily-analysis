@@ -1,200 +1,163 @@
 """
 话题分析模块
 
-负责使用 LLM 从解析后的消息中分析讨论话题。
-本模块提取并总结群聊中讨论的主要话题。
+负责使用LLM从解析后的消息中分析讨论话题
+本模块提取并总结群聊中讨论的主要话题
 """
 
 import json
 import re
-import asyncio
 from typing import List, Tuple
 from astrbot.api import logger
 from ..models import ParsedMessage, Topic, TokenUsage
+from ..utils.llm_helper import LLMHelper
 
 
 class TopicsAnalyzer:
     """
     话题分析器
-    
-    使用 LLM 从解析后的消息中分析讨论话题。
-    分析器会格式化消息（包含真实用户名和时间戳），然后使用 LLM 提取有意义的话题及详细描述。
+
+    使用LLM从解析后的消息中分析讨论话题
+    分析器会格式化消息（包含真实用户名和时间戳），然后使用LLM提取有意义的话题及详细描述
     """
 
     def __init__(self, context, config_manager):
         """
         初始化话题分析器
-        
+
         Args:
-            context: AstrBot 上下文，用于访问 LLM 提供者
+            context: AstrBot上下文，用于访问LLM提供者
             config_manager: 配置管理器
         """
         self.context = context
         self.config_manager = config_manager
+        self.llm_helper = LLMHelper(context, config_manager)
 
     async def analyze(
-        self,
-        messages: List[ParsedMessage],
-        umo: str = None
+        self, messages: List[ParsedMessage], umo: str = None
     ) -> Tuple[List[Topic], TokenUsage]:
         """
         从解析后的消息中分析话题
-        
+
         Args:
             messages: ParsedMessage 对象列表，包含真实用户信息
             umo: LLM 选择的唯一模型对象标识符
-            
+
         Returns:
             元组：(Topic 对象列表, TokenUsage)
         """
-        try:
-            # Validate input
-            if not messages:
-                logger.warning("No messages provided for topic analysis")
-                return [], TokenUsage()
-            
-            if not isinstance(messages, list):
-                logger.error(f"Invalid messages type: expected list, got {type(messages)}")
-                return [], TokenUsage()
-            
-            # Filter messages with meaningful content
-            text_messages = []
-            try:
-                for msg in messages:
-                    try:
-                        # Skip empty messages, commands, and very short messages
-                        if msg.content and len(msg.content.strip()) > 2 and not msg.content.startswith("/"):
-                            text_messages.append(msg)
-                    except AttributeError as e:
-                        logger.warning(f"Invalid message object in list: {e}")
-                        continue
-            except Exception as e:
-                logger.error(f"Error filtering messages for topic analysis: {e}", exc_info=True)
-                return [], TokenUsage()
-
-            if not text_messages:
-                logger.info("No text messages to analyze for topics after filtering")
-                return [], TokenUsage()
-
-            # Format messages with actual usernames and timestamps
-            try:
-                messages_text = self._format_messages_for_llm(text_messages)
-            except Exception as e:
-                logger.error(f"Error formatting messages for LLM: {e}", exc_info=True)
-                return [], TokenUsage()
-            
-            # Build LLM prompt
-            try:
-                max_topics = self.config_manager.get_max_topics()
-                prompt = self._build_topics_prompt(messages_text, max_topics)
-            except Exception as e:
-                logger.error(f"Error building LLM prompt: {e}", exc_info=True)
-                return [], TokenUsage()
-            
-            # Call LLM with retry logic
-            try:
-                response = await self._call_llm_with_retry(prompt, umo)
-                if response is None:
-                    logger.error(
-                        "Topics analysis LLM call failed: provider returned None. "
-                        "Please check your LLM configuration and network connection."
-                    )
-                    return [], TokenUsage()
-            except Exception as e:
-                logger.error(f"Error calling LLM for topic analysis: {e}", exc_info=True)
-                return [], TokenUsage()
-
-            # Extract token usage
-            try:
-                token_usage = self._extract_token_usage(response)
-            except Exception as e:
-                logger.warning(f"Error extracting token usage: {e}")
-                token_usage = TokenUsage()
-            
-            # Parse response
-            try:
-                result_text = self._extract_response_text(response)
-            except Exception as e:
-                logger.error(f"Error extracting response text: {e}", exc_info=True)
-                return [], token_usage
-            
-            # Parse JSON and create Topic objects
-            try:
-                topics = self._parse_topics_response(result_text, max_topics)
-            except Exception as e:
-                logger.error(f"Error parsing topics response: {e}", exc_info=True)
-                # Return fallback topic
-                logger.info("Using fallback topic due to parsing error")
-                return [Topic(
-                    title="Group Discussion",
-                    participants=["Group Members"],
-                    description="Today's group chat covered various topics. Unable to extract detailed topics due to analysis error.",
-                    message_count=len(text_messages)
-                )], token_usage
-            
-            logger.info(f"Topics analysis completed successfully: {len(topics)} topics extracted")
-            return topics, token_usage
-
-        except Exception as e:
-            logger.error(f"Unexpected error in topics analysis: {e}", exc_info=True)
+        if not messages:
+            logger.warning("未提供消息数据进行话题分析")
             return [], TokenUsage()
+
+        if not isinstance(messages, list):
+            logger.error(f"消息数据类型错误: 期望list，实际{type(messages)}")
+            return [], TokenUsage()
+
+        # 过滤有意义的文本消息
+        text_messages = [
+            msg
+            for msg in messages
+            if hasattr(msg, "content")
+            and msg.content
+            and len(msg.content.strip()) > 2
+            and not msg.content.startswith("/")
+        ]
+
+        if not text_messages:
+            logger.info("过滤后无可分析的文本消息")
+            return [], TokenUsage()
+
+        # 格式化消息并构建提示词
+        messages_text = self._format_messages_for_llm(text_messages)
+        max_topics = self.config_manager.get_max_topics()
+        prompt = self._build_topics_prompt(messages_text, max_topics)
+
+        # 调用LLM进行分析
+        response = await self.llm_helper.call_llm_with_retry(
+            prompt, max_tokens=10000, temperature=0.6, umo=umo
+        )
+        if response is None:
+            logger.error("话题分析LLM调用失败，请检查LLM配置和网络连接")
+            return [], TokenUsage()
+
+        # 提取token使用量和响应文本
+        token_usage = self.llm_helper.extract_token_usage(response)
+        result_text = self.llm_helper.extract_response_text(response)
+
+        # 解析响应并创建话题对象
+        topics = self._parse_topics_response(result_text, max_topics)
+        if not topics:
+            # 返回默认话题作为后备
+            logger.info("使用默认话题作为解析失败的后备")
+            topics = [
+                Topic(
+                    title="群组讨论",
+                    participants=["群成员"],
+                    description="今日群聊涵盖了多个话题，由于分析错误无法提取详细话题信息",
+                    message_count=len(text_messages),
+                )
+            ]
+
+        logger.info(f"话题分析完成: 提取了{len(topics)}个话题")
+        return topics, token_usage
 
     def _format_messages_for_llm(self, messages: List[ParsedMessage]) -> str:
         """
         格式化解析后的消息供 LLM 输入，包含真实用户名和时间戳
-        
+
         Args:
             messages: ParsedMessage 对象列表
-            
+
         Returns:
             格式化后的消息字符串
         """
         from datetime import datetime
-        
+
         formatted_messages = []
         for msg in messages:
             # Convert timestamp to readable time
             time_str = datetime.fromtimestamp(msg.timestamp).strftime("%H:%M")
-            
+
             # Clean message content
             content = self._clean_message_content(msg.content)
-            
+
             # Format: [HH:MM] Username: content
             formatted_messages.append(f"[{time_str}] {msg.sender_name}: {content}")
-        
+
         return "\n".join(formatted_messages)
 
     def _clean_message_content(self, content: str) -> str:
         """
         清理消息内容以避免 JSON 解析问题
-        
+
         Args:
             content: 原始消息内容
-            
+
         Returns:
             清理后的内容
         """
         # Replace Chinese quotes with English quotes
         content = content.replace('"', '"').replace('"', '"')
-        content = content.replace(''', "'").replace(''', "'")
-        
+        content = content.replace(""", "'").replace(""", "'")
+
         # Remove or replace special characters
-        content = content.replace('\n', ' ').replace('\r', ' ')
-        content = content.replace('\t', ' ')
-        
+        content = content.replace("\n", " ").replace("\r", " ")
+        content = content.replace("\t", " ")
+
         # Remove control characters
-        content = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', content)
-        
+        content = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", content)
+
         return content.strip()
 
     def _build_topics_prompt(self, messages_text: str, max_topics: int) -> str:
         """
         构建话题分析的 LLM 提示词
-        
+
         Args:
             messages_text: 格式化后的消息文本
             max_topics: 要提取的最大话题数量
-            
+
         Returns:
             完整的提示词字符串
         """
@@ -247,199 +210,20 @@ class TopicsAnalyzer:
 
 注意：返回的内容必须是纯 JSON，不要包含 markdown 代码块标记或其他格式"""
 
-    async def _call_llm_with_retry(self, prompt: str, umo: str = None):
-        """
-        调用 LLM 提供者，带重试逻辑
-        
-        Args:
-            prompt: 发送给 LLM 的提示词
-            umo: 唯一模型对象标识符
-            
-        Returns:
-            LLM 响应，失败时返回 None
-        """
-        try:
-            timeout = self.config_manager.get_llm_timeout()
-            retries = self.config_manager.get_llm_retries()
-            backoff = self.config_manager.get_llm_backoff()
-        except Exception as e:
-            logger.error(f"Error getting LLM configuration: {e}. Using defaults.", exc_info=True)
-            timeout = 30
-            retries = 3
-            backoff = 2
-
-        # Get custom provider parameters
-        try:
-            custom_api_key = self.config_manager.get_custom_api_key()
-            custom_api_base = self.config_manager.get_custom_api_base_url()
-            custom_model = self.config_manager.get_custom_model_name()
-        except Exception as e:
-            logger.warning(f"Error getting custom provider config: {e}. Using default provider.")
-            custom_api_key = None
-            custom_api_base = None
-            custom_model = None
-
-        last_exc = None
-        for attempt in range(1, retries + 1):
-            try:
-                if custom_api_key and custom_api_base and custom_model:
-                    logger.info(f"Using custom LLM provider (attempt {attempt}/{retries}): {custom_api_base} model={custom_model}")
-                    try:
-                        import aiohttp
-                    except ImportError as e:
-                        logger.error(f"aiohttp not available for custom provider: {e}")
-                        return None
-                    
-                    try:
-                        async with aiohttp.ClientSession() as session:
-                            headers = {
-                                "Authorization": f"Bearer {custom_api_key}",
-                                "Content-Type": "application/json"
-                            }
-                            payload = {
-                                "model": custom_model,
-                                "messages": [{"role": "user", "content": prompt}],
-                                "max_tokens": 10000,
-                                "temperature": 0.6
-                            }
-                            aio_timeout = aiohttp.ClientTimeout(total=timeout)
-                            async with session.post(custom_api_base, json=payload, headers=headers, timeout=aio_timeout) as resp:
-                                if resp.status != 200:
-                                    error_text = await resp.text()
-                                    error_msg = f"Custom LLM provider request failed: HTTP {resp.status}, content: {error_text[:200]}"
-                                    logger.error(error_msg)
-                                    raise Exception(error_msg)
-                                
-                                try:
-                                    response_json = await resp.json()
-                                except Exception as json_err:
-                                    error_text = await resp.text()
-                                    logger.error(
-                                        f"Custom LLM provider response JSON parsing failed: {json_err}, "
-                                        f"content: {error_text[:200]}"
-                                    )
-                                    raise
-                                
-                                # Compatible with OpenAI format
-                                content = None
-                                try:
-                                    choices = response_json.get("choices")
-                                    if choices and isinstance(choices, list) and len(choices) > 0:
-                                        message = choices[0].get("message")
-                                        if message and isinstance(message, dict):
-                                            content = message.get("content")
-                                    if content is None:
-                                        logger.error(f"Custom LLM response format error: {response_json}")
-                                        raise Exception("Invalid response format from custom LLM provider")
-                                except Exception as key_err:
-                                    logger.error(
-                                        f"Custom LLM response structure parsing failed: {key_err}, "
-                                        f"response: {str(response_json)[:200]}"
-                                    )
-                                    raise
-                                
-                                # Create compatible response object
-                                class CustomResponse:
-                                    completion_text = content
-                                    raw_completion = response_json
-                                
-                                logger.info(f"Custom LLM request successful on attempt {attempt}")
-                                return CustomResponse()
-                    except aiohttp.ClientError as e:
-                        logger.error(f"Network error with custom LLM provider: {e}")
-                        raise
-                else:
-                    # Use AstrBot provider
-                    try:
-                        provider = self.context.get_using_provider(umo=umo)
-                        if not provider:
-                            error_msg = "LLM provider is None. Please configure an LLM provider in AstrBot settings."
-                            logger.error(error_msg)
-                            return None
-                        
-                        logger.info(f"Using LLM provider (attempt {attempt}/{retries}): {provider}")
-                        coro = provider.text_chat(prompt=prompt, max_tokens=10000, temperature=0.6)
-                        result = await asyncio.wait_for(coro, timeout=timeout)
-                        logger.info(f"LLM request successful on attempt {attempt}")
-                        return result
-                    except AttributeError as e:
-                        logger.error(f"LLM provider method error: {e}. The provider may not support text_chat.", exc_info=True)
-                        return None
-                    
-            except asyncio.TimeoutError as e:
-                last_exc = e
-                logger.warning(
-                    f"LLM request timeout on attempt {attempt}/{retries} (timeout={timeout}s). "
-                    f"Consider increasing the timeout in configuration."
-                )
-            except Exception as e:
-                last_exc = e
-                logger.warning(f"LLM request failed on attempt {attempt}/{retries}: {e}", exc_info=(attempt == retries))
-            
-            # Wait before retry
-            if attempt < retries:
-                wait_time = backoff * attempt
-                logger.info(f"Waiting {wait_time}s before retry...")
-                await asyncio.sleep(wait_time)
-
-        logger.error(
-            f"All {retries} LLM retry attempts failed. Last error: {last_exc}. "
-            f"Please check your LLM configuration and network connection."
-        )
-        return None
-
-    def _extract_token_usage(self, response) -> TokenUsage:
-        """
-        Extract token usage from LLM response.
-        
-        Args:
-            response: LLM response object
-            
-        Returns:
-            TokenUsage object
-        """
-        token_usage = TokenUsage()
-        try:
-            if getattr(response, 'raw_completion', None) is not None:
-                usage = getattr(response.raw_completion, 'usage', None)
-                if usage:
-                    token_usage.prompt_tokens = getattr(usage, 'prompt_tokens', 0) or 0
-                    token_usage.completion_tokens = getattr(usage, 'completion_tokens', 0) or 0
-                    token_usage.total_tokens = getattr(usage, 'total_tokens', 0) or 0
-        except Exception as e:
-            logger.debug(f"Failed to extract token usage: {e}")
-        
-        return token_usage
-
-    def _extract_response_text(self, response) -> str:
-        """
-        Extract text from LLM response.
-        
-        Args:
-            response: LLM response object
-            
-        Returns:
-            Response text
-        """
-        if hasattr(response, 'completion_text'):
-            return response.completion_text
-        else:
-            return str(response)
-
     def _parse_topics_response(self, result_text: str, max_topics: int) -> List[Topic]:
         """
-        Parse LLM response and extract topics.
-        
+        解析LLM响应并提取话题
+
         Args:
-            result_text: Raw LLM response text
-            max_topics: Maximum number of topics to return
-            
+            result_text: 原始LLM响应文本
+            max_topics: 返回的最大话题数量
+
         Returns:
-            List of Topic objects
+            Topic对象列表
         """
         try:
             # Try to extract JSON
-            json_match = re.search(r'\[.*?\]', result_text, re.DOTALL)
+            json_match = re.search(r"\[.*?\]", result_text, re.DOTALL)
             if json_match:
                 json_text = json_match.group()
                 logger.debug(f"Topics analysis JSON raw: {json_text[:500]}...")
@@ -456,17 +240,21 @@ class TopicsAnalyzer:
                         title=topic_dict.get("topic", ""),
                         participants=topic_dict.get("contributors", []),
                         description=topic_dict.get("detail", ""),
-                        message_count=0  # Will be calculated later if needed
+                        message_count=0,  # Will be calculated later if needed
                     )
                     topics.append(topic)
-                
+
                 logger.info(f"Successfully parsed {len(topics)} topics")
                 return topics
             else:
-                logger.warning(f"No JSON format found in response: {result_text[:200]}...")
+                logger.warning(
+                    f"No JSON format found in response: {result_text[:200]}..."
+                )
         except json.JSONDecodeError as e:
             logger.error(f"Topics analysis JSON parsing failed: {e}")
-            logger.debug(f"Fixed JSON: {json_text if 'json_text' in locals() else 'N/A'}")
+            logger.debug(
+                f"Fixed JSON: {json_text if 'json_text' in locals() else 'N/A'}"
+            )
             logger.debug(f"Raw response: {result_text}")
 
             # Fallback: try regex extraction
@@ -477,66 +265,70 @@ class TopicsAnalyzer:
             else:
                 # Final fallback
                 logger.info("Regex extraction failed, using default topic")
-                return [Topic(
-                    title="Group Discussion",
-                    participants=["Group Members"],
-                    description="Today's group chat covered various topics with rich content",
-                    message_count=0
-                )]
+                return [
+                    Topic(
+                        title="Group Discussion",
+                        participants=["Group Members"],
+                        description="Today's group chat covered various topics with rich content",
+                        message_count=0,
+                    )
+                ]
 
         return []
 
     def _fix_json(self, text: str) -> str:
         """
-        Fix common JSON format issues.
-        
+        修复常见的JSON格式问题
+
         Args:
-            text: Raw JSON text
-            
+            text: 原始JSON文本
+
         Returns:
-            Fixed JSON text
+            修复后的JSON文本
         """
         # Remove markdown code block markers
-        text = re.sub(r'```json\s*', '', text)
-        text = re.sub(r'```\s*', '', text)
+        text = re.sub(r"```json\s*", "", text)
+        text = re.sub(r"```\s*", "", text)
 
         # Basic cleaning
-        text = text.replace('\n', ' ').replace('\r', ' ')
-        text = re.sub(r'\s+', ' ', text)
+        text = text.replace("\n", " ").replace("\r", " ")
+        text = re.sub(r"\s+", " ", text)
 
         # Replace Chinese quotes with English quotes
         text = text.replace('"', '"').replace('"', '"')
-        text = text.replace(''', "'").replace(''', "'")
+        text = text.replace(""", "'").replace(""", "'")
 
         # Fix truncated JSON
-        if not text.endswith(']'):
-            last_complete = text.rfind('}')
+        if not text.endswith("]"):
+            last_complete = text.rfind("}")
             if last_complete > 0:
-                text = text[:last_complete + 1] + ']'
+                text = text[: last_complete + 1] + "]"
 
         # Fix common JSON format issues
         # 1. Fix missing commas between objects
-        text = re.sub(r'}\s*{', '}, {', text)
+        text = re.sub(r"}\s*{", "}, {", text)
 
         # 2. Ensure field names have quotes
-        text = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', text)
+        text = re.sub(r"([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:", r'\1"\2":', text)
 
         # 3. Remove extra commas
-        text = re.sub(r',\s*}', '}', text)
-        text = re.sub(r',\s*]', ']', text)
+        text = re.sub(r",\s*}", "}", text)
+        text = re.sub(r",\s*]", "]", text)
 
         return text
 
-    def _extract_topics_with_regex(self, result_text: str, max_topics: int) -> List[Topic]:
+    def _extract_topics_with_regex(
+        self, result_text: str, max_topics: int
+    ) -> List[Topic]:
         """
-        Extract topics using regex as fallback.
-        
+        使用正则表达式提取话题（降级方案）
+
         Args:
-            result_text: Raw LLM response text
-            max_topics: Maximum number of topics to extract
-            
+            result_text: 原始LLM响应文本
+            max_topics: 要提取的最大话题数量
+
         Returns:
-            List of Topic objects
+            Topic对象列表
         """
         try:
             topics = []
@@ -556,7 +348,9 @@ class TopicsAnalyzer:
                 detail = match[2].strip()
 
                 # Clean escaped characters in detail
-                detail = detail.replace('\\"', '"').replace('\\n', ' ').replace('\\t', ' ')
+                detail = (
+                    detail.replace('\\"', '"').replace("\\n", " ").replace("\\t", " ")
+                )
 
                 # Parse contributors list
                 contributors = []
@@ -566,12 +360,14 @@ class TopicsAnalyzer:
                 if not contributors:
                     contributors = ["Group Members"]
 
-                topics.append(Topic(
-                    title=topic_name,
-                    participants=contributors[:5],  # Max 5 participants
-                    description=detail,
-                    message_count=0
-                ))
+                topics.append(
+                    Topic(
+                        title=topic_name,
+                        participants=contributors[:5],  # Max 5 participants
+                        description=detail,
+                        message_count=0,
+                    )
+                )
 
             return topics
         except Exception as e:

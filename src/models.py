@@ -1,30 +1,31 @@
 """
-Core data models for the Lark group daily analysis plugin.
+飞书群聊日报分析插件的核心数据模型
 
-This module defines all the data structures used throughout the plugin,
-including message parsing, user information, analysis results, and statistics.
+本模块定义了插件中使用的所有数据结构，
+包括消息解析、用户信息、分析结果和统计数据。
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Tuple
 from datetime import datetime
 
 
 @dataclass
 class ParsedMessage:
     """
-    Unified message format after parsing Lark SDK message objects.
-    
+    解析飞书 SDK 消息对象后的统一消息格式
+
     Attributes:
-        message_id: Unique message identifier
-        timestamp: Unix timestamp in seconds
-        sender_id: Sender's open_id
-        sender_name: Actual nickname of the sender
-        sender_avatar: Avatar URL of the sender
-        content: Parsed text content
-        message_type: Type of message (text, post, system, etc.)
-        raw_content: Original content for debugging
+        message_id: 唯一消息标识符
+        timestamp: Unix 时间戳（秒）
+        sender_id: 发送者的 open_id
+        sender_name: 发送者的真实昵称
+        sender_avatar: 发送者的头像 URL
+        content: 解析后的文本内容
+        message_type: 消息类型（text、post、system 等）
+        raw_content: 原始内容（用于调试）
     """
+
     message_id: str
     timestamp: int
     sender_id: str
@@ -38,14 +39,15 @@ class ParsedMessage:
 @dataclass
 class UserInfo:
     """
-    User information fetched from Lark API.
-    
+    从飞书 API 获取的用户信息
+
     Attributes:
-        open_id: User's unique open_id
-        name: Display name
-        avatar_url: Avatar image URL
-        en_name: English name (optional)
+        open_id: 用户的唯一 open_id
+        name: 显示名称
+        avatar_url: 头像图片 URL
+        en_name: 英文名称（可选）
     """
+
     open_id: str
     name: str
     avatar_url: str
@@ -55,14 +57,15 @@ class UserInfo:
 @dataclass
 class Topic:
     """
-    Discussion topic extracted from messages.
-    
+    从消息中提取的讨论话题
+
     Attributes:
-        title: Topic title
-        participants: List of participant names
-        description: Detailed description of the topic
-        message_count: Number of messages in this topic
+        title: 话题标题
+        participants: 参与者名称列表
+        description: 话题的详细描述
+        message_count: 此话题中的消息数量
     """
+
     title: str
     participants: List[str]
     description: str
@@ -72,18 +75,19 @@ class Topic:
 @dataclass
 class UserMetrics:
     """
-    User activity metrics.
-    
+    用户活动指标
+
     Attributes:
-        message_count: Total number of messages
-        char_count: Total character count
-        avg_message_length: Average message length
-        emoji_count: Total emoji count
-        reply_count: Number of replies
-        hourly_distribution: Message distribution by hour (0-23)
-        sender_name: User's display name (for internal use)
-        sender_avatar: User's avatar URL (for internal use)
+        message_count: 消息总数
+        char_count: 字符总数
+        avg_message_length: 平均消息长度
+        emoji_count: 表情总数
+        reply_count: 回复数量
+        hourly_distribution: 按小时分布的消息数（0-23）
+        sender_name: 用户显示名称（内部使用）
+        sender_avatar: 用户头像 URL（内部使用）
     """
+
     message_count: int
     char_count: int
     avg_message_length: float
@@ -97,17 +101,18 @@ class UserMetrics:
 @dataclass
 class UserTitle:
     """
-    User activity title assigned by LLM analysis.
-    
+    LLM 分析分配的用户活动称号
+
     Attributes:
-        open_id: User's open_id
-        name: User's display name
-        avatar_url: User's avatar URL
-        title: Assigned title
-        mbti: MBTI personality type
-        reason: Reason for the title assignment
-        metrics: User activity metrics
+        open_id: 用户的 open_id
+        name: 用户显示名称
+        avatar_url: 用户头像 URL
+        title: 分配的称号
+        mbti: MBTI 人格类型
+        reason: 分配此称号的原因
+        metrics: 用户活动指标
     """
+
     open_id: str
     name: str
     avatar_url: str
@@ -120,15 +125,16 @@ class UserTitle:
 @dataclass
 class Quote:
     """
-    Golden quote extracted from messages.
-    
+    从消息中提取的金句
+
     Attributes:
-        content: Quote content
-        sender_name: Name of the person who said it
-        sender_avatar: Avatar URL of the sender
-        timestamp: When the quote was said (Unix timestamp)
-        reason: Why this quote was selected
+        content: 金句内容
+        sender_name: 发言人姓名
+        sender_avatar: 发送者头像 URL
+        timestamp: 发言时间（Unix 时间戳）
+        reason: 选择此金句的原因
     """
+
     content: str
     sender_name: str
     sender_avatar: str
@@ -139,14 +145,15 @@ class Quote:
 @dataclass
 class EmojiStats:
     """
-    Emoji usage statistics.
-    
+    表情使用统计
+
     Attributes:
-        total_count: Total number of emojis used
-        unique_count: Number of unique emojis
-        top_emojis: Dictionary of emoji to count
-        emoji_per_user: Emoji count per user
+        total_count: 使用的表情总数
+        unique_count: 唯一表情数量
+        top_emojis: 表情到数量的字典
+        emoji_per_user: 每个用户的表情数量
     """
+
     total_count: int = 0
     unique_count: int = 0
     top_emojis: Dict[str, int] = field(default_factory=dict)
@@ -156,16 +163,17 @@ class EmojiStats:
 @dataclass
 class Statistics:
     """
-    Group statistics.
-    
+    群组统计数据
+
     Attributes:
-        message_count: Total message count
-        char_count: Total character count
-        participant_count: Number of unique participants
-        hourly_distribution: Message distribution by hour (0-23)
-        peak_hours: Top 3 peak activity hours
-        emoji_stats: Emoji usage statistics
+        message_count: 消息总数
+        char_count: 字符总数
+        participant_count: 唯一参与者数量
+        hourly_distribution: 按小时分布的消息数（0-23）
+        peak_hours: 前 3 个活跃高峰时段
+        emoji_stats: 表情使用统计
     """
+
     message_count: int
     char_count: int
     participant_count: int
@@ -177,39 +185,41 @@ class Statistics:
 @dataclass
 class TokenUsage:
     """
-    LLM token usage tracking.
-    
+    LLM token 使用量跟踪
+
     Attributes:
-        prompt_tokens: Number of tokens in the prompt
-        completion_tokens: Number of tokens in the completion
-        total_tokens: Total tokens used
+        prompt_tokens: 提示词中的 token 数量
+        completion_tokens: 完成内容中的 token 数量
+        total_tokens: 使用的总 token 数量
     """
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
-    
-    def add(self, other: 'TokenUsage') -> 'TokenUsage':
-        """Add another TokenUsage to this one."""
+
+    def add(self, other: "TokenUsage") -> "TokenUsage":
+        """将另一个 TokenUsage 添加到当前对象"""
         return TokenUsage(
             prompt_tokens=self.prompt_tokens + other.prompt_tokens,
             completion_tokens=self.completion_tokens + other.completion_tokens,
-            total_tokens=self.total_tokens + other.total_tokens
+            total_tokens=self.total_tokens + other.total_tokens,
         )
 
 
 @dataclass
 class AnalysisResult:
     """
-    Complete analysis result.
-    
+    完整的分析结果
+
     Attributes:
-        topics: List of discussion topics
-        user_titles: List of user titles
-        quotes: List of golden quotes
-        statistics: Group statistics
-        token_usage: Total token usage
-        analysis_period: Tuple of (start_time, end_time)
+        topics: 讨论话题列表
+        user_titles: 用户称号列表
+        quotes: 金句列表
+        statistics: 群组统计数据
+        token_usage: 总 token 使用量
+        analysis_period: 分析时间段（开始时间，结束时间）
     """
+
     topics: List[Topic]
     user_titles: List[UserTitle]
     quotes: List[Quote]
