@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "Sequential thinking": {
+      "command": "C:\\Users\\Simon\\AppData\\Roaming\\fnm\\node-versions\\v22.19.0\\installation\\npx.cmd",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "env": {
+        "PATH": "C:\\Users\\Simon\\AppData\\Roaming\\fnm\\node-versions\\v22.19.0\\installation;${PATH}"
+      }
+    },
+    "Context 7": {
+      "command": "C:\\Users\\Simon\\AppData\\Roaming\\fnm\\node-versions\\v22.19.0\\installation\\npx.cmd",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "env": {
+        "PATH": "C:\\Users\\Simon\\AppData\\Roaming\\fnm\\node-versions\\v22.19.0\\installation;${PATH}"
+      }
+    },
+    "Playwright": {
+      "command": "C:\\Users\\Simon\\AppData\\Roaming\\fnm\\node-versions\\v22.19.0\\installation\\npx.cmd",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ],
+      "env": {
+        "PATH": "C:\\Users\\Simon\\AppData\\Roaming\\fnm\\node-versions\\v22.19.0\\installation;${PATH}"
+      }
+    }
+  }
+}
