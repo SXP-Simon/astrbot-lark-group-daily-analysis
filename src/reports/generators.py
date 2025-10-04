@@ -11,21 +11,52 @@ from pathlib import Path
 from astrbot.api import logger
 from .templates import HTMLTemplates
 from ..visualization.activity_charts import ActivityVisualizer
+from ..models import AnalysisResult
 
 
 class ReportGenerator:
     """报告生成器"""
 
-    def __init__(self, config_manager, lark_client=None):
+    def __init__(self, config_manager):
         self.config_manager = config_manager
         self.activity_visualizer = ActivityVisualizer()
-        self.lark_client = lark_client
 
-    async def generate_image_report(self, analysis_result: Dict, group_id: str, html_render_func) -> Optional[str]:
-        """生成图片格式的分析报告"""
+    async def generate_image_report(self, analysis_result: AnalysisResult, group_id: str, html_render_func) -> Optional[str]:
+        """生成图片格式的分析报告，包含完整的fallback处理
+        
+        Args:
+            analysis_result: AnalysisResult对象，包含完整的分析结果
+            group_id: 群组ID
+            html_render_func: HTML渲染函数
+            
+        Returns:
+            图片URL或None（如果生成失败）
+        """
+        render_payload = None
         try:
-            # 准备渲染数据
-            render_payload = await self._prepare_render_data(analysis_result)
+            # Validate inputs
+            if not analysis_result:
+                logger.error("Cannot generate image report: analysis_result is None")
+                return None
+            
+            if not html_render_func:
+                logger.error("Cannot generate image report: html_render_func is None")
+                return None
+            
+            # 准备渲染数据（内部已有fallback处理）
+            try:
+                render_payload = self._prepare_render_data(analysis_result)
+            except Exception as e:
+                logger.error(f"Error preparing render data for image report: {e}", exc_info=True)
+                return None
+            
+            # Get template
+            try:
+                template = HTMLTemplates.get_image_template()
+            except Exception as e:
+                logger.error(f"Error getting image template: {e}", exc_info=True)
+                return None
+            
             # 使用AstrBot内置的HTML渲染服务（直接传递模板和数据）
             # 使用兼容的图片生成选项（基于NetworkRenderStrategy的默认设置）
             image_options = {
@@ -33,43 +64,86 @@ class ReportGenerator:
                 "type": "jpeg",  # 使用默认的jpeg格式提高兼容性
                 "quality": 95,   # 设置合理的质量
             }
-            image_url = await html_render_func(
-                HTMLTemplates.get_image_template(),
-                render_payload,
-                True,  # return_url=True，返回URL而不是下载文件
-                image_options
-            )
-
-            logger.info(f"图片生成成功: {image_url}")
-            return image_url
+            
+            try:
+                image_url = await html_render_func(
+                    template,
+                    render_payload,
+                    True,  # return_url=True，返回URL而不是下载文件
+                    image_options
+                )
+                
+                if image_url:
+                    logger.info(f"图片生成成功: {image_url}")
+                    return image_url
+                else:
+                    logger.warning("HTML render function returned None")
+                    raise Exception("HTML render function returned None")
+                    
+            except Exception as e:
+                logger.error(f"Error calling HTML render function: {e}", exc_info=True)
+                raise
 
         except Exception as e:
             logger.error(f"生成图片报告失败: {e}", exc_info=True)
+            
             # 尝试使用更简单的选项作为后备方案
-            try:
-                logger.info("尝试使用低质量选项重新生成...")
-                simple_options = {
-                    "full_page": True,
-                    "type": "jpeg",
-                    "quality": 70  # 降低质量以提高兼容性
-                }
-                image_url = await html_render_func(
-                    HTMLTemplates.get_image_template(),
-                    render_payload,
-                    True,
-                    simple_options
-                )
-                logger.info(f"使用低质量选项生成成功: {image_url}")
-                return image_url
-            except Exception as fallback_e:
-                logger.error(f"后备低质量方案也失败: {fallback_e}")
-                return None
+            if render_payload and html_render_func:
+                try:
+                    logger.info("尝试使用低质量选项重新生成...")
+                    simple_options = {
+                        "full_page": True,
+                        "type": "jpeg",
+                        "quality": 70  # 降低质量以提高兼容性
+                    }
+                    
+                    try:
+                        template = HTMLTemplates.get_image_template()
+                    except Exception as template_e:
+                        logger.error(f"Error getting template for fallback: {template_e}")
+                        return None
+                    
+                    image_url = await html_render_func(
+                        template,
+                        render_payload,
+                        True,
+                        simple_options
+                    )
+                    
+                    if image_url:
+                        logger.info(f"使用低质量选项生成成功: {image_url}")
+                        return image_url
+                    else:
+                        logger.warning("Fallback render also returned None")
+                        
+                except Exception as fallback_e:
+                    logger.error(f"后备低质量方案也失败: {fallback_e}", exc_info=True)
+            
+            # 所有图片生成方案都失败，返回None
+            logger.warning(
+                "图片报告生成失败，建议使用文本格式作为fallback。"
+                "请检查HTML渲染服务是否正常运行。"
+            )
+            return None
 
 
 
-    async def generate_pdf_report(self, analysis_result: Dict, group_id: str) -> Optional[str]:
-        """生成PDF格式的分析报告"""
+    async def generate_pdf_report(self, analysis_result: AnalysisResult, group_id: str) -> Optional[str]:
+        """生成PDF格式的分析报告，包含完整的fallback处理
+        
+        Args:
+            analysis_result: AnalysisResult对象，包含完整的分析结果
+            group_id: 群组ID
+            
+        Returns:
+            PDF文件路径或None（如果生成失败）
+        """
         try:
+            # 检查pyppeteer是否可用
+            if not self.config_manager.pyppeteer_available:
+                logger.warning("pyppeteer不可用，无法生成PDF报告")
+                return None
+            
             # 确保输出目录存在
             output_dir = Path(self.config_manager.get_pdf_output_dir())
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -82,8 +156,8 @@ class ReportGenerator:
             )
             pdf_path = output_dir / filename
 
-            # 准备渲染数据
-            render_data = await self._prepare_render_data(analysis_result)
+            # 准备渲染数据（内部已有fallback处理）
+            render_data = self._prepare_render_data(analysis_result)
             logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
             # 生成 HTML 内容（PDF模板使用{}占位符）
@@ -94,162 +168,341 @@ class ReportGenerator:
             success = await self._html_to_pdf(html_content, str(pdf_path))
 
             if success:
+                logger.info(f"PDF报告生成成功: {pdf_path}")
                 return str(pdf_path.absolute())
             else:
+                logger.warning("PDF转换失败，建议使用文本或图片格式作为fallback")
                 return None
 
         except Exception as e:
-            logger.error(f"生成 PDF 报告失败: {e}")
+            logger.error(f"生成 PDF 报告失败: {e}", exc_info=True)
+            logger.warning("PDF报告生成失败，建议使用文本或图片格式作为fallback")
             return None
 
-    def generate_text_report(self, analysis_result: Dict) -> str:
-        """生成文本格式的分析报告"""
-        stats = analysis_result["statistics"]
-        topics = analysis_result["topics"]
-        user_titles = analysis_result["user_titles"]
+    def generate_text_report(self, analysis_result: AnalysisResult) -> str:
+        """生成文本格式的分析报告
+        
+        Args:
+            analysis_result: AnalysisResult对象，包含完整的分析结果
+            
+        Returns:
+            格式化的文本报告
+        """
+        try:
+            # Validate input
+            if not analysis_result:
+                logger.error("Cannot generate text report: analysis_result is None")
+                return "❌ 报告生成失败：分析结果为空"
+            
+            # Safely extract data with fallbacks
+            try:
+                stats = analysis_result.statistics
+            except AttributeError as e:
+                logger.error(f"Error accessing statistics: {e}")
+                stats = None
+            
+            try:
+                topics = analysis_result.topics if analysis_result.topics else []
+            except AttributeError:
+                topics = []
+            
+            try:
+                user_titles = analysis_result.user_titles if analysis_result.user_titles else []
+            except AttributeError:
+                user_titles = []
+            
+            try:
+                quotes = analysis_result.quotes if analysis_result.quotes else []
+            except AttributeError:
+                quotes = []
 
-        report = f"""
+            # 计算最活跃时段
+            try:
+                if stats and stats.peak_hours:
+                    peak_hours = stats.peak_hours[:3]
+                    most_active_period = "、".join([f"{h:02d}:00-{h+1:02d}:00" for h in peak_hours])
+                else:
+                    most_active_period = "无数据"
+            except Exception as e:
+                logger.warning(f"Error calculating peak hours: {e}")
+                most_active_period = "无数据"
+
+            # Build report with safe access
+            try:
+                message_count = stats.message_count if stats else 0
+                participant_count = stats.participant_count if stats else 0
+                char_count = stats.char_count if stats else 0
+                emoji_count = stats.emoji_stats.total_count if stats and stats.emoji_stats else 0
+            except AttributeError as e:
+                logger.warning(f"Error accessing statistics fields: {e}")
+                message_count = 0
+                participant_count = 0
+                char_count = 0
+                emoji_count = 0
+
+            report = f"""
 🎯 群聊日常分析报告
 📅 {datetime.now().strftime('%Y年%m月%d日')}
 
 📊 基础统计
-• 消息总数: {stats.message_count}
-• 参与人数: {stats.participant_count}
-• 总字符数: {stats.total_characters}
-• 表情数量: {stats.emoji_count}
-• 最活跃时段: {stats.most_active_period}
+• 消息总数: {message_count}
+• 参与人数: {participant_count}
+• 总字符数: {char_count}
+• 表情数量: {emoji_count}
+• 最活跃时段: {most_active_period}
 
 💬 热门话题
 """
 
-        max_topics = self.config_manager.get_max_topics()
-        for i, topic in enumerate(topics[:max_topics], 1):
-            contributors_str = "、".join(topic.contributors)
-            report += f"{i}. {topic.topic}\n"
-            report += f"   参与者: {contributors_str}\n"
-            report += f"   {topic.detail}\n\n"
+            try:
+                max_topics = self.config_manager.get_max_topics()
+            except Exception as e:
+                logger.warning(f"Error getting max_topics config: {e}")
+                max_topics = 5
+            
+            if topics:
+                for i, topic in enumerate(topics[:max_topics], 1):
+                    try:
+                        contributors_str = "、".join(topic.participants) if topic.participants else "未知"
+                        title = topic.title if topic.title else "未命名话题"
+                        description = topic.description if topic.description else "暂无描述"
+                        
+                        report += f"{i}. {title}\n"
+                        report += f"   参与者: {contributors_str}\n"
+                        report += f"   {description}\n\n"
+                    except AttributeError as e:
+                        logger.warning(f"Error formatting topic {i}: {e}")
+                        continue
+            else:
+                report += "暂无热门话题数据\n\n"
 
-        report += "🏆 群友称号\n"
-        max_user_titles = self.config_manager.get_max_user_titles()
-        for title in user_titles[:max_user_titles]:
-            report += f"• {title.name} - {title.title} ({title.mbti})\n"
-            report += f"  {title.reason}\n\n"
+            report += "🏆 群友称号\n"
+            
+            try:
+                max_user_titles = self.config_manager.get_max_user_titles()
+            except Exception as e:
+                logger.warning(f"Error getting max_user_titles config: {e}")
+                max_user_titles = 10
+            
+            if user_titles:
+                for title in user_titles[:max_user_titles]:
+                    try:
+                        name = title.name if title.name else "未知用户"
+                        title_text = title.title if title.title else "无称号"
+                        mbti = title.mbti if title.mbti else "N/A"
+                        reason = title.reason if title.reason else "暂无说明"
+                        
+                        report += f"• {name} - {title_text} ({mbti})\n"
+                        report += f"  {reason}\n\n"
+                    except AttributeError as e:
+                        logger.warning(f"Error formatting user title: {e}")
+                        continue
+            else:
+                report += "暂无群友称号数据\n\n"
 
-        report += "💬 群圣经\n"
-        max_golden_quotes = self.config_manager.get_max_golden_quotes()
-        for i, quote in enumerate(stats.golden_quotes[:max_golden_quotes], 1):
-            report += f"{i}. \"{quote.content}\" —— {quote.sender}\n"
-            report += f"   {quote.reason}\n\n"
+            report += "💬 群圣经\n"
+            
+            try:
+                max_golden_quotes = self.config_manager.get_max_golden_quotes()
+            except Exception as e:
+                logger.warning(f"Error getting max_golden_quotes config: {e}")
+                max_golden_quotes = 5
+            
+            if quotes:
+                for i, quote in enumerate(quotes[:max_golden_quotes], 1):
+                    try:
+                        content = quote.content if quote.content else "暂无内容"
+                        sender_name = quote.sender_name if quote.sender_name else "未知"
+                        reason = quote.reason if quote.reason else "暂无说明"
+                        
+                        report += f"{i}. \"{content}\" —— {sender_name}\n"
+                        report += f"   {reason}\n\n"
+                    except AttributeError as e:
+                        logger.warning(f"Error formatting quote {i}: {e}")
+                        continue
+            else:
+                report += "暂无群圣经数据\n\n"
 
-        return report
-
-    async def _prepare_render_data(self, analysis_result: Dict) -> Dict:
-        """准备渲染数据，补全 open_id->昵称映射"""
-        stats = analysis_result["statistics"]
-        topics = analysis_result["topics"]
-        user_titles = analysis_result["user_titles"]
-        activity_viz = stats.activity_visualization
-
-        # 收集所有 open_id
-        open_ids = set()
-        for title in user_titles:
-            open_ids.add(str(title.user_id))
-        for topic in topics:
-            open_ids.update(topic.contributors)
-        for quote in stats.golden_quotes:
-            if hasattr(quote, "sender_id"):
-                open_ids.add(str(quote.sender_id))
-            elif hasattr(quote, "sender"):
-                open_ids.add(str(quote.sender))
-
-        # 逐个获取昵称（兼容无 BatchGetUserRequest 的 lark_oapi 版本）
-        openid2name = {}
-        try:
-            from lark_oapi.api.contact.v3 import GetUserRequest
-            if open_ids and self.lark_client:
-                for open_id in open_ids:
-                    req = GetUserRequest.builder().user_id(open_id).user_id_type("open_id").build()
-                    resp = await self.lark_client.contact.v3.user.get(req)
-                    if resp.success():
-                        openid2name[open_id] = resp.data.user.name or open_id[:8]
+            logger.info("Text report generated successfully")
+            return report
+            
         except Exception as e:
-            logger.warning(f"获取飞书昵称失败: {e}")
+            logger.error(f"Unexpected error generating text report: {e}", exc_info=True)
+            return f"""
+❌ 报告生成失败
 
-        # 构建话题HTML
-        topics_html = ""
-        max_topics = self.config_manager.get_max_topics()
-        for i, topic in enumerate(topics[:max_topics], 1):
-            contributors_str = "、".join([openid2name.get(uid, uid[:8]) for uid in topic.contributors])
-            topics_html += f"""
-            <div class="topic-item">
-                <div class="topic-header">
-                    <span class="topic-number">{i}</span>
-                    <span class="topic-title">{topic.topic}</span>
-                </div>
-                <div class="topic-contributors">参与者: {contributors_str}</div>
-                <div class="topic-detail">{topic.detail}</div>
-            </div>
-            """
+生成文本报告时发生错误。请检查日志获取详细信息。
 
-        # 构建用户称号HTML（包含头像）
-        titles_html = ""
-        max_user_titles = self.config_manager.get_max_user_titles()
-        for title in user_titles[:max_user_titles]:
-            avatar_data = await self._get_user_avatar(str(title.user_id))
-            avatar_html = f'<img src="{avatar_data}" class="user-avatar" alt="头像">' if avatar_data else '<div class="user-avatar-placeholder">👤</div>'
-            user_name = openid2name.get(str(title.user_id), str(title.user_id)[:8])
-            titles_html += f"""
-            <div class="user-title">
-                <div class="user-info">
-                    {avatar_html}
-                    <div class="user-details">
-                        <div class="user-name">{user_name}</div>
-                        <div class="user-badges">
-                            <div class="user-title-badge">{title.title}</div>
-                            <div class="user-mbti">{title.mbti}</div>
+错误信息: {str(e)}
+"""
+
+    def _prepare_render_data(self, analysis_result: AnalysisResult) -> Dict:
+        """准备渲染数据，使用新的AnalysisResult模型，包含完整的fallback处理
+        
+        Args:
+            analysis_result: AnalysisResult对象，包含完整的分析结果
+            
+        Returns:
+            渲染数据字典，所有字段都有fallback值
+        """
+        try:
+            stats = analysis_result.statistics
+            topics = analysis_result.topics if analysis_result.topics else []
+            user_titles = analysis_result.user_titles if analysis_result.user_titles else []
+            quotes = analysis_result.quotes if analysis_result.quotes else []
+
+            # 计算最活跃时段，带fallback
+            peak_hours = stats.peak_hours[:3] if stats.peak_hours else []
+            most_active_period = "、".join([f"{h:02d}:00-{h+1:02d}:00" for h in peak_hours]) if peak_hours else "无数据"
+
+            # 构建话题HTML，带fallback
+            topics_html = ""
+            max_topics = self.config_manager.get_max_topics()
+            if topics:
+                for i, topic in enumerate(topics[:max_topics], 1):
+                    # 安全获取参与者列表
+                    contributors = topic.participants if topic.participants else []
+                    contributors_str = "、".join(contributors) if contributors else "未知"
+                    
+                    # 安全获取话题信息
+                    title = topic.title if topic.title else "未命名话题"
+                    description = topic.description if topic.description else "暂无描述"
+                    
+                    topics_html += f"""
+                    <div class="topic-item">
+                        <div class="topic-header">
+                            <span class="topic-number">{i}</span>
+                            <span class="topic-title">{title}</span>
                         </div>
+                        <div class="topic-contributors">参与者: {contributors_str}</div>
+                        <div class="topic-detail">{description}</div>
                     </div>
+                    """
+            else:
+                # 无话题时的fallback
+                topics_html = """
+                <div class="topic-item">
+                    <div class="topic-detail" style="text-align: center; color: #999;">暂无热门话题数据</div>
                 </div>
-                <div class="user-reason">{title.reason}</div>
-            </div>
-            """
+                """
 
-        # 构建金句HTML
-        quotes_html = ""
-        max_golden_quotes = self.config_manager.get_max_golden_quotes()
-        for quote in stats.golden_quotes[:max_golden_quotes]:
-            sender_id = getattr(quote, "sender_id", None) or getattr(quote, "sender", None)
-            sender_name = openid2name.get(str(sender_id), str(sender_id)[:8]) if sender_id else ""
-            quotes_html += f"""
-            <div class="quote-item">
-                <div class="quote-content">"{quote.content}"</div>
-                <div class="quote-author">—— {sender_name}</div>
-                <div class="quote-reason">{quote.reason}</div>
-            </div>
-            """
+            # 构建用户称号HTML（包含头像），带fallback
+            titles_html = ""
+            max_user_titles = self.config_manager.get_max_user_titles()
+            if user_titles:
+                for title in user_titles[:max_user_titles]:
+                    # Debug: log avatar URL
+                    logger.debug(f"Generating report for user {title.name}: avatar_url={title.avatar_url[:80] if title.avatar_url else 'None'}...")
+                    
+                    # 安全获取头像，带fallback
+                    if title.avatar_url:
+                        try:
+                            avatar_html = f'<img src="{title.avatar_url}" class="user-avatar" alt="头像" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';">'
+                            avatar_html += '<div class="user-avatar-placeholder" style="display:none;">👤</div>'
+                        except Exception:
+                            avatar_html = '<div class="user-avatar-placeholder">👤</div>'
+                    else:
+                        avatar_html = '<div class="user-avatar-placeholder">👤</div>'
+                    
+                    # 安全获取用户信息
+                    user_name = title.name if title.name else "未知用户"
+                    user_title = title.title if title.title else "无称号"
+                    user_mbti = title.mbti if title.mbti else "N/A"
+                    user_reason = title.reason if title.reason else "暂无说明"
+                    
+                    titles_html += f"""
+                    <div class="user-title">
+                        <div class="user-info">
+                            {avatar_html}
+                            <div class="user-details">
+                                <div class="user-name">{user_name}</div>
+                                <div class="user-badges">
+                                    <div class="user-title-badge">{user_title}</div>
+                                    <div class="user-mbti">{user_mbti}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="user-reason">{user_reason}</div>
+                    </div>
+                    """
+            else:
+                # 无用户称号时的fallback
+                titles_html = """
+                <div class="user-title">
+                    <div class="user-info" style="width: 100%; text-align: center; color: #999;">暂无群友称号数据</div>
+                </div>
+                """
 
-        # 生成活跃度可视化HTML
-        hourly_chart_html = self.activity_visualizer.generate_hourly_chart_html(
-            activity_viz.hourly_activity
-        )
+            # 构建金句HTML，带fallback
+            quotes_html = ""
+            max_golden_quotes = self.config_manager.get_max_golden_quotes()
+            if quotes:
+                for quote in quotes[:max_golden_quotes]:
+                    # 安全获取金句信息
+                    content = quote.content if quote.content else "暂无内容"
+                    sender_name = quote.sender_name if quote.sender_name else "未知"
+                    reason = quote.reason if quote.reason else "暂无说明"
+                    
+                    quotes_html += f"""
+                    <div class="quote-item">
+                        <div class="quote-content">"{content}"</div>
+                        <div class="quote-author">—— {sender_name}</div>
+                        <div class="quote-reason">{reason}</div>
+                    </div>
+                    """
+            else:
+                # 无金句时的fallback
+                quotes_html = """
+                <div class="quote-item">
+                    <div class="quote-content" style="text-align: center; color: #999;">暂无群圣经数据</div>
+                </div>
+                """
 
-        # 返回扁平化的渲染数据
-        return {
-            "current_date": datetime.now().strftime('%Y年%m月%d日'),
-            "current_datetime": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "message_count": stats.message_count,
-            "participant_count": stats.participant_count,
-            "total_characters": stats.total_characters,
-            "emoji_count": stats.emoji_count,
-            "most_active_period": stats.most_active_period,
-            "topics_html": topics_html,
-            "titles_html": titles_html,
-            "quotes_html": quotes_html,
-            "hourly_chart_html": hourly_chart_html,
-            "total_tokens": stats.token_usage.total_tokens if stats.token_usage.total_tokens else 0,
-            "prompt_tokens": stats.token_usage.prompt_tokens if stats.token_usage.prompt_tokens else 0,
-            "completion_tokens": stats.token_usage.completion_tokens if stats.token_usage.completion_tokens else 0
-        }
+            # 生成活跃度可视化HTML，带fallback
+            try:
+                hourly_chart_html = self.activity_visualizer.generate_hourly_chart_html(
+                    stats.hourly_distribution if stats.hourly_distribution else {}
+                )
+            except Exception as e:
+                logger.warning(f"生成活跃度图表失败: {e}")
+                hourly_chart_html = '<div style="text-align: center; color: #999;">活跃度数据不可用</div>'
+
+            # 返回扁平化的渲染数据，所有字段都有安全的fallback
+            return {
+                "current_date": datetime.now().strftime('%Y年%m月%d日'),
+                "current_datetime": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "message_count": stats.message_count if stats.message_count else 0,
+                "participant_count": stats.participant_count if stats.participant_count else 0,
+                "total_characters": stats.char_count if stats.char_count else 0,
+                "emoji_count": stats.emoji_stats.total_count if stats.emoji_stats and stats.emoji_stats.total_count else 0,
+                "most_active_period": most_active_period,
+                "topics_html": topics_html,
+                "titles_html": titles_html,
+                "quotes_html": quotes_html,
+                "hourly_chart_html": hourly_chart_html,
+                "total_tokens": analysis_result.token_usage.total_tokens if analysis_result.token_usage else 0,
+                "prompt_tokens": analysis_result.token_usage.prompt_tokens if analysis_result.token_usage else 0,
+                "completion_tokens": analysis_result.token_usage.completion_tokens if analysis_result.token_usage else 0
+            }
+        except Exception as e:
+            logger.error(f"准备渲染数据时发生错误: {e}", exc_info=True)
+            # 返回最小可用的fallback数据
+            return {
+                "current_date": datetime.now().strftime('%Y年%m月%d日'),
+                "current_datetime": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "message_count": 0,
+                "participant_count": 0,
+                "total_characters": 0,
+                "emoji_count": 0,
+                "most_active_period": "无数据",
+                "topics_html": '<div style="text-align: center; color: #999;">数据加载失败</div>',
+                "titles_html": '<div style="text-align: center; color: #999;">数据加载失败</div>',
+                "quotes_html": '<div style="text-align: center; color: #999;">数据加载失败</div>',
+                "hourly_chart_html": '<div style="text-align: center; color: #999;">数据加载失败</div>',
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0
+            }
 
 
 
@@ -292,47 +545,34 @@ class ReportGenerator:
 
         return result
 
-    async def _get_user_avatar(self, user_id: str) -> Optional[str]:
-        """仅获取飞书用户头像（open_id），返回base64编码"""
-        try:
-            # 仅支持飞书 open_id
-            if not user_id or not user_id.startswith("ou_"):
-                logger.warning(f"非飞书 open_id，跳过头像: {user_id}")
-                return None
-            if not self.lark_client:
-                logger.warning("lark_client 未注入，无法获取头像")
-                return None
-            from lark_oapi.api.contact.v3 import GetUserRequest
-            req = GetUserRequest.builder().user_id(user_id).user_id_type("open_id").build()
-            resp = await self.lark_client.contact.v3.user.get(req)
-            if resp.success():
-                avatar_url = resp.data.user.avatar.avatar_240 or resp.data.user.avatar.avatar_72
-                if avatar_url:
-                    async with aiohttp.ClientSession() as client:
-                        response = await client.get(avatar_url)
-                        response.raise_for_status()
-                        avatar_data = await response.read()
-                        avatar_base64 = base64.b64encode(avatar_data).decode('utf-8')
-                        return f"data:image/jpeg;base64,{avatar_base64}"
-            logger.warning(f"未获取到飞书头像: {user_id}")
-            return None
-        except Exception as e:
-            logger.error(f"获取飞书用户头像失败 {user_id}: {e}")
-            return None
+
 
     async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
         """将 HTML 内容转换为 PDF 文件"""
         try:
+            # Validate inputs
+            if not html_content:
+                logger.error("Cannot convert to PDF: html_content is empty")
+                return False
+            
+            if not output_path:
+                logger.error("Cannot convert to PDF: output_path is empty")
+                return False
+            
             # 确保 pyppeteer 可用
             if not self.config_manager.pyppeteer_available:
-                logger.error("pyppeteer 不可用，无法生成 PDF")
+                logger.error("pyppeteer 不可用，无法生成 PDF。请安装 pyppeteer: pip install pyppeteer")
                 return False
 
             # 动态导入 pyppeteer
-            import pyppeteer
-            from pyppeteer import launch
-            import sys
-            import os
+            try:
+                import pyppeteer
+                from pyppeteer import launch
+                import sys
+                import os
+            except ImportError as e:
+                logger.error(f"Failed to import pyppeteer: {e}. Please install it: pip install pyppeteer")
+                return False
 
             # 尝试启动浏览器，如果 Chromium 不存在会自动下载
             logger.info("启动浏览器进行 PDF 转换")
@@ -366,42 +606,76 @@ class ReportGenerator:
                         logger.info(f"使用系统 Chrome: {chrome_path}")
                         break
 
-            browser = await launch(**launch_options)
-            page = await browser.newPage()
-
-            # 设置页面内容 (pyppeteer 1.0.2 版本的 API)
-            await page.setContent(html_content)
-            # 等待页面加载完成
+            # Launch browser
             try:
-                await page.waitForSelector('body', {'timeout': 10000})
-            except Exception:
-                # 如果等待失败，继续执行（可能页面已经加载完成）
-                pass
+                browser = await launch(**launch_options)
+            except Exception as e:
+                logger.error(f"Failed to launch browser: {e}. Please check if Chrome/Chromium is installed.", exc_info=True)
+                return False
+            
+            try:
+                page = await browser.newPage()
 
-            # 导出 PDF
-            await page.pdf({
-                'path': output_path,
-                'format': 'A4',
-                'printBackground': True,
-                'margin': {
-                    'top': '10mm',
-                    'right': '10mm',
-                    'bottom': '10mm',
-                    'left': '10mm'
-                },
-                'scale': 0.8
-            })
+                # 设置页面内容 (pyppeteer 1.0.2 版本的 API)
+                try:
+                    await page.setContent(html_content)
+                except Exception as e:
+                    logger.error(f"Failed to set page content: {e}", exc_info=True)
+                    await browser.close()
+                    return False
+                
+                # 等待页面加载完成
+                try:
+                    await page.waitForSelector('body', {'timeout': 10000})
+                except Exception as e:
+                    # 如果等待失败，继续执行（可能页面已经加载完成）
+                    logger.debug(f"Wait for selector timed out (may be OK): {e}")
 
-            await browser.close()
-            logger.info(f"PDF 生成成功: {output_path}")
-            return True
+                # 导出 PDF
+                try:
+                    await page.pdf({
+                        'path': output_path,
+                        'format': 'A4',
+                        'printBackground': True,
+                        'margin': {
+                            'top': '10mm',
+                            'right': '10mm',
+                            'bottom': '10mm',
+                            'left': '10mm'
+                        },
+                        'scale': 0.8
+                    })
+                except Exception as e:
+                    logger.error(f"Failed to generate PDF: {e}", exc_info=True)
+                    await browser.close()
+                    return False
+
+                await browser.close()
+                logger.info(f"PDF 生成成功: {output_path}")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Error during PDF generation: {e}", exc_info=True)
+                try:
+                    await browser.close()
+                except:
+                    pass
+                return False
 
         except Exception as e:
             error_msg = str(e)
-            if "Chromium downloadable not found" in error_msg:
-                logger.error("Chromium 下载失败，建议安装 pyppeteer2 或使用系统 Chrome")
-            elif "No usable sandbox" in error_msg:
-                logger.error("沙盒权限问题，已尝试禁用沙盒")
+            if "Chromium downloadable not found" in error_msg or "Chromium" in error_msg:
+                logger.error(
+                    "Chromium 下载失败或未找到。建议：\n"
+                    "1. 安装 pyppeteer2: pip install pyppeteer2\n"
+                    "2. 或安装系统 Chrome 浏览器\n"
+                    "3. 或使用文本/图片格式作为替代"
+                )
+            elif "No usable sandbox" in error_msg or "sandbox" in error_msg.lower():
+                logger.error(
+                    "沙盒权限问题。已尝试禁用沙盒，但仍然失败。\n"
+                    "建议使用文本或图片格式作为替代。"
+                )
             else:
-                logger.error(f"HTML 转 PDF 失败: {e}")
+                logger.error(f"HTML 转 PDF 失败: {e}", exc_info=True)
             return False

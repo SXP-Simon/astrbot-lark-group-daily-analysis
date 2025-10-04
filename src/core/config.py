@@ -25,11 +25,21 @@ class ConfigManager:
 
     def get_max_messages(self) -> int:
         """获取最大消息数量"""
-        return self.config.get("max_messages", 1000)
+        max_msgs = self.config.get("max_messages", 1000)
+        # Validate that it's a positive integer
+        if not isinstance(max_msgs, int) or max_msgs <= 0:
+            logger.warning(f"Invalid max_messages value: {max_msgs}, using default: 1000")
+            return 1000
+        return max_msgs
 
     def get_analysis_days(self) -> int:
         """获取分析天数"""
-        return self.config.get("analysis_days", 1)
+        days = self.config.get("analysis_days", 1)
+        # Validate range (1-7 days)
+        if not isinstance(days, int) or days < 1 or days > 7:
+            logger.warning(f"Invalid analysis_days value: {days}, using default: 1")
+            return 1
+        return days
 
     def get_auto_analysis_time(self) -> str:
         """获取自动分析时间"""
@@ -38,14 +48,39 @@ class ConfigManager:
     def get_enable_auto_analysis(self) -> bool:
         """获取是否启用自动分析"""
         return self.config.get("enable_auto_analysis", False)
+    
+    def get_user_name_mapping(self) -> dict:
+        """
+        获取用户名称映射配置
+        
+        Returns:
+            字典，key 为 open_id，value 为用户自定义名称
+            例如: {"ou_xxx": "张三", "ou_yyy": "李四"}
+        """
+        mapping = self.config.get("user_name_mapping", {})
+        if not isinstance(mapping, dict):
+            logger.warning(f"Invalid user_name_mapping format: {type(mapping)}, using empty dict")
+            return {}
+        return mapping
 
     def get_output_format(self) -> str:
         """获取输出格式"""
-        return self.config.get("output_format", "image")
+        format_type = self.config.get("output_format", "image")
+        # Validate format type
+        valid_formats = ["image", "text", "pdf"]
+        if format_type not in valid_formats:
+            logger.warning(f"Invalid output_format value: {format_type}, using default: image")
+            return "image"
+        return format_type
 
     def get_min_messages_threshold(self) -> int:
         """获取最小消息阈值"""
-        return self.config.get("min_messages_threshold", 50)
+        threshold = self.config.get("min_messages_threshold", 50)
+        # Validate that it's a positive integer
+        if not isinstance(threshold, int) or threshold <= 0:
+            logger.warning(f"Invalid min_messages_threshold value: {threshold}, using default: 50")
+            return 50
+        return threshold
 
     def get_topic_analysis_enabled(self) -> bool:
         """获取是否启用话题分析"""
@@ -55,33 +90,72 @@ class ConfigManager:
         """获取是否启用用户称号分析"""
         return self.config.get("user_title_analysis_enabled", True)
 
+    def get_golden_quotes_analysis_enabled(self) -> bool:
+        """获取是否启用金句分析"""
+        return self.config.get("golden_quotes_analysis_enabled", True)
+
     def get_max_topics(self) -> int:
         """获取最大话题数量"""
-        return self.config.get("max_topics", 5)
+        max_topics = self.config.get("max_topics", 5)
+        # Validate that it's a positive integer
+        if not isinstance(max_topics, int) or max_topics <= 0:
+            logger.warning(f"Invalid max_topics value: {max_topics}, using default: 5")
+            return 5
+        return max_topics
 
     def get_max_user_titles(self) -> int:
         """获取最大用户称号数量"""
-        return self.config.get("max_user_titles", 8)
+        max_titles = self.config.get("max_user_titles", 8)
+        # Validate that it's a positive integer
+        if not isinstance(max_titles, int) or max_titles <= 0:
+            logger.warning(f"Invalid max_user_titles value: {max_titles}, using default: 8")
+            return 8
+        return max_titles
 
     def get_max_golden_quotes(self) -> int:
         """获取最大金句数量"""
-        return self.config.get("max_golden_quotes", 5)
+        max_quotes = self.config.get("max_golden_quotes", 5)
+        # Validate that it's a positive integer
+        if not isinstance(max_quotes, int) or max_quotes <= 0:
+            logger.warning(f"Invalid max_golden_quotes value: {max_quotes}, using default: 5")
+            return 5
+        return max_quotes
 
     def get_max_query_rounds(self) -> int:
         """获取最大查询轮数"""
-        return self.config.get("max_query_rounds", 35)
+        max_rounds = self.config.get("max_query_rounds", 35)
+        # Validate that it's a positive integer
+        if not isinstance(max_rounds, int) or max_rounds <= 0:
+            logger.warning(f"Invalid max_query_rounds value: {max_rounds}, using default: 35")
+            return 35
+        return max_rounds
 
     def get_llm_timeout(self) -> int:
         """获取LLM请求超时时间（秒）"""
-        return self.config.get("llm_timeout", 30)
+        timeout = self.config.get("llm_timeout", 30)
+        # Validate that it's a positive integer
+        if not isinstance(timeout, int) or timeout <= 0:
+            logger.warning(f"Invalid llm_timeout value: {timeout}, using default: 30")
+            return 30
+        return timeout
 
     def get_llm_retries(self) -> int:
         """获取LLM请求重试次数"""
-        return self.config.get("llm_retries", 2)
+        retries = self.config.get("llm_retries", 2)
+        # Validate that it's a non-negative integer
+        if not isinstance(retries, int) or retries < 0:
+            logger.warning(f"Invalid llm_retries value: {retries}, using default: 2")
+            return 2
+        return retries
 
     def get_llm_backoff(self) -> int:
         """获取LLM请求重试退避基值（秒），实际退避会乘以尝试次数"""
-        return self.config.get("llm_backoff", 2)
+        backoff = self.config.get("llm_backoff", 2)
+        # Validate that it's a positive integer
+        if not isinstance(backoff, int) or backoff <= 0:
+            logger.warning(f"Invalid llm_backoff value: {backoff}, using default: 2")
+            return 2
+        return backoff
 
     def get_custom_api_key(self) -> str:
         """获取自定义 LLM 服务的 API Key"""
@@ -97,10 +171,6 @@ class ConfigManager:
     def get_pdf_output_dir(self) -> str:
         """获取PDF输出目录"""
         return self.config.get("pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/reports")
-    
-    def get_bot_open_id(self) -> str:
-        """获取飞书bot Open ID"""
-        return str(self.config.get("bot_open_id", ""))
 
     def get_pdf_filename_format(self) -> str:
         """获取PDF文件名格式"""
@@ -108,6 +178,11 @@ class ConfigManager:
 
     def set_output_format(self, format_type: str):
         """设置输出格式"""
+        # Validate format type
+        valid_formats = ["image", "text", "pdf"]
+        if format_type not in valid_formats:
+            logger.error(f"Invalid output_format value: {format_type}, must be one of {valid_formats}")
+            raise ValueError(f"output_format must be one of {valid_formats}, got {format_type}")
         self.config["output_format"] = format_type
         self.config.save_config()
 
@@ -118,11 +193,19 @@ class ConfigManager:
 
     def set_max_messages(self, count: int):
         """设置最大消息数量"""
+        # Validate that it's a positive integer
+        if not isinstance(count, int) or count <= 0:
+            logger.error(f"Invalid max_messages value: {count}, must be positive")
+            raise ValueError(f"max_messages must be positive, got {count}")
         self.config["max_messages"] = count
         self.config.save_config()
 
     def set_analysis_days(self, days: int):
         """设置分析天数"""
+        # Validate range (1-7 days)
+        if not isinstance(days, int) or days < 1 or days > 7:
+            logger.error(f"Invalid analysis_days value: {days}, must be between 1 and 7")
+            raise ValueError(f"analysis_days must be between 1 and 7, got {days}")
         self.config["analysis_days"] = days
         self.config.save_config()
 
@@ -138,6 +221,10 @@ class ConfigManager:
 
     def set_min_messages_threshold(self, threshold: int):
         """设置最小消息阈值"""
+        # Validate that it's a positive integer
+        if not isinstance(threshold, int) or threshold <= 0:
+            logger.error(f"Invalid min_messages_threshold value: {threshold}, must be positive")
+            raise ValueError(f"min_messages_threshold must be positive, got {threshold}")
         self.config["min_messages_threshold"] = threshold
         self.config.save_config()
 
@@ -151,23 +238,44 @@ class ConfigManager:
         self.config["user_title_analysis_enabled"] = enabled
         self.config.save_config()
 
+    def set_golden_quotes_analysis_enabled(self, enabled: bool):
+        """设置是否启用金句分析"""
+        self.config["golden_quotes_analysis_enabled"] = enabled
+        self.config.save_config()
+
     def set_max_topics(self, count: int):
         """设置最大话题数量"""
+        # Validate that it's a positive integer
+        if not isinstance(count, int) or count <= 0:
+            logger.error(f"Invalid max_topics value: {count}, must be positive")
+            raise ValueError(f"max_topics must be positive, got {count}")
         self.config["max_topics"] = count
         self.config.save_config()
 
     def set_max_user_titles(self, count: int):
         """设置最大用户称号数量"""
+        # Validate that it's a positive integer
+        if not isinstance(count, int) or count <= 0:
+            logger.error(f"Invalid max_user_titles value: {count}, must be positive")
+            raise ValueError(f"max_user_titles must be positive, got {count}")
         self.config["max_user_titles"] = count
         self.config.save_config()
 
     def set_max_golden_quotes(self, count: int):
         """设置最大金句数量"""
+        # Validate that it's a positive integer
+        if not isinstance(count, int) or count <= 0:
+            logger.error(f"Invalid max_golden_quotes value: {count}, must be positive")
+            raise ValueError(f"max_golden_quotes must be positive, got {count}")
         self.config["max_golden_quotes"] = count
         self.config.save_config()
 
     def set_max_query_rounds(self, rounds: int):
         """设置最大查询轮数"""
+        # Validate that it's a positive integer
+        if not isinstance(rounds, int) or rounds <= 0:
+            logger.error(f"Invalid max_query_rounds value: {rounds}, must be positive")
+            raise ValueError(f"max_query_rounds must be positive, got {rounds}")
         self.config["max_query_rounds"] = rounds
         self.config.save_config()
 
@@ -288,3 +396,86 @@ class ConfigManager:
             logger.info("配置重载完成")
         except Exception as e:
             logger.error(f"重新加载配置失败: {e}")
+
+    def validate_config(self) -> bool:
+        """
+        验证所有配置项的有效性
+        
+        Returns:
+            bool: 如果所有配置有效返回True，否则返回False
+        """
+        is_valid = True
+        
+        # Validate analysis_days (1-7)
+        analysis_days = self.config.get("analysis_days", 1)
+        if not isinstance(analysis_days, int) or analysis_days < 1 or analysis_days > 7:
+            logger.error(f"配置验证失败: analysis_days 必须在 1-7 之间，当前值: {analysis_days}")
+            is_valid = False
+        
+        # Validate max_messages > 0
+        max_messages = self.config.get("max_messages", 1000)
+        if not isinstance(max_messages, int) or max_messages <= 0:
+            logger.error(f"配置验证失败: max_messages 必须大于 0，当前值: {max_messages}")
+            is_valid = False
+        
+        # Validate output format options
+        output_format = self.config.get("output_format", "image")
+        valid_formats = ["image", "text", "pdf"]
+        if output_format not in valid_formats:
+            logger.error(f"配置验证失败: output_format 必须是 {valid_formats} 之一，当前值: {output_format}")
+            is_valid = False
+        
+        # Validate min_messages_threshold > 0
+        min_threshold = self.config.get("min_messages_threshold", 50)
+        if not isinstance(min_threshold, int) or min_threshold <= 0:
+            logger.error(f"配置验证失败: min_messages_threshold 必须大于 0，当前值: {min_threshold}")
+            is_valid = False
+        
+        # Validate max_topics > 0
+        max_topics = self.config.get("max_topics", 5)
+        if not isinstance(max_topics, int) or max_topics <= 0:
+            logger.error(f"配置验证失败: max_topics 必须大于 0，当前值: {max_topics}")
+            is_valid = False
+        
+        # Validate max_user_titles > 0
+        max_titles = self.config.get("max_user_titles", 8)
+        if not isinstance(max_titles, int) or max_titles <= 0:
+            logger.error(f"配置验证失败: max_user_titles 必须大于 0，当前值: {max_titles}")
+            is_valid = False
+        
+        # Validate max_golden_quotes > 0
+        max_quotes = self.config.get("max_golden_quotes", 5)
+        if not isinstance(max_quotes, int) or max_quotes <= 0:
+            logger.error(f"配置验证失败: max_golden_quotes 必须大于 0，当前值: {max_quotes}")
+            is_valid = False
+        
+        # Validate max_query_rounds > 0
+        max_rounds = self.config.get("max_query_rounds", 35)
+        if not isinstance(max_rounds, int) or max_rounds <= 0:
+            logger.error(f"配置验证失败: max_query_rounds 必须大于 0，当前值: {max_rounds}")
+            is_valid = False
+        
+        # Validate llm_timeout > 0
+        llm_timeout = self.config.get("llm_timeout", 30)
+        if not isinstance(llm_timeout, int) or llm_timeout <= 0:
+            logger.error(f"配置验证失败: llm_timeout 必须大于 0，当前值: {llm_timeout}")
+            is_valid = False
+        
+        # Validate llm_retries >= 0
+        llm_retries = self.config.get("llm_retries", 2)
+        if not isinstance(llm_retries, int) or llm_retries < 0:
+            logger.error(f"配置验证失败: llm_retries 必须大于等于 0，当前值: {llm_retries}")
+            is_valid = False
+        
+        # Validate llm_backoff > 0
+        llm_backoff = self.config.get("llm_backoff", 2)
+        if not isinstance(llm_backoff, int) or llm_backoff <= 0:
+            logger.error(f"配置验证失败: llm_backoff 必须大于 0，当前值: {llm_backoff}")
+            is_valid = False
+        
+        if is_valid:
+            logger.info("配置验证通过")
+        else:
+            logger.warning("配置验证失败，某些配置项无效，将使用默认值")
+        
+        return is_valid

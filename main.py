@@ -19,17 +19,29 @@ from astrbot.core.star.filter.permission import PermissionType
 
 # 导入重构后的模块
 from .src.core.config import ConfigManager
-from .src.core.bot_manager import BotManager
+from .src.lark.client import LarkClientManager
+from .src.lark.user_info import UserInfoCache
+from .src.lark.message_fetcher import MessageFetcher
+from .src.lark.message_parser import MessageParser
+from .src.analysis.topics import TopicsAnalyzer
+from .src.analysis.users import UsersAnalyzer
+from .src.analysis.quotes import QuotesAnalyzer
+from .src.analysis.statistics import StatisticsCalculator
 from .src.reports.generators import ReportGenerator
 from .src.scheduler.auto_scheduler import AutoScheduler
 from .src.utils.pdf_utils import PDFInstaller
-from .src.utils.helpers import MessageAnalyzer
 
 
 # 全局变量
 config_manager = None
-bot_manager = None
-message_analyzer = None
+lark_client_manager = None
+user_info_cache = None
+message_fetcher = None
+message_parser = None
+topics_analyzer = None
+users_analyzer = None
+quotes_analyzer = None
+statistics_calculator = None
 report_generator = None
 auto_scheduler = None
 
@@ -40,27 +52,47 @@ class LarkGroupDailyAnalysis(Star):
         self.config = config
 
         # 初始化模块化组件
-        global config_manager, bot_manager, message_analyzer, report_generator, auto_scheduler
+        global config_manager, lark_client_manager, user_info_cache, message_fetcher, message_parser
+        global topics_analyzer, users_analyzer, quotes_analyzer, statistics_calculator
+        global report_generator, auto_scheduler
 
-        config_manager = ConfigManager(config)
-        bot_manager = BotManager(config_manager)
-        bot_manager.set_context(context)
-        message_analyzer = MessageAnalyzer(context, config_manager, bot_manager)
-        report_generator = ReportGenerator(config_manager)
-        auto_scheduler = AutoScheduler(
-            config_manager,
-            message_analyzer.message_handler,
-            message_analyzer,
-            report_generator,
-            bot_manager,
-            self.html_render  # 传入html_render函数
-        )
-
-        # 延迟启动自动调度器，给系统时间初始化
-        if config_manager.get_enable_auto_analysis():
-            asyncio.create_task(self._delayed_start_scheduler())
-
-        logger.info("飞书群日常分析插件已初始化（模块化版本）")
+        try:
+            # Initialize configuration
+            config_manager = ConfigManager(config)
+            
+            # Initialize Lark client manager (lazy initialization - will connect on first use)
+            lark_client_manager = LarkClientManager(context)
+            logger.info("Lark client manager created (will initialize on first use)")
+            
+            # Initialize user info cache with config manager for user name mapping
+            user_info_cache = UserInfoCache(lark_client_manager, ttl=3600, config_manager=config_manager)
+            logger.info("User info cache initialized")
+            
+            # Initialize message fetcher and parser
+            message_fetcher = MessageFetcher(lark_client_manager)
+            message_parser = MessageParser(user_info_cache)
+            logger.info("Message fetcher and parser initialized")
+            
+            # Initialize analyzers
+            topics_analyzer = TopicsAnalyzer(context, config_manager)
+            users_analyzer = UsersAnalyzer(context, config_manager)
+            quotes_analyzer = QuotesAnalyzer(context, config_manager)
+            statistics_calculator = StatisticsCalculator()
+            logger.info("Analysis modules initialized")
+            
+            # Initialize report generator
+            report_generator = ReportGenerator(config_manager)
+            logger.info("Report generator initialized")
+            
+            # Initialize auto scheduler (if needed)
+            # TODO: Update auto_scheduler to use new architecture
+            # auto_scheduler = AutoScheduler(...)
+            
+            logger.info("飞书群日常分析插件已初始化（重构版本）")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize plugin: {e}", exc_info=True)
+            raise
 
     async def _delayed_start_scheduler(self):
         """延迟启动调度器，给系统时间初始化"""
@@ -68,16 +100,9 @@ class LarkGroupDailyAnalysis(Star):
             # 等待10秒让系统完全初始化
             await asyncio.sleep(10)
 
-            # 初始化bot管理器
-            if await bot_manager.initialize_from_config():
-                logger.info("Bot管理器初始化成功，启用自动分析功能")
-
-                # 启动调度器
-                await auto_scheduler.start_scheduler()
-            else:
-                logger.warning("Bot管理器初始化失败，无法启用自动分析功能")
-                status = bot_manager.get_status_info()
-                logger.info(f"Bot管理器状态: {status}")
+            # TODO: Update auto_scheduler to use new architecture
+            # await auto_scheduler.start_scheduler()
+            logger.info("Auto scheduler will be implemented in a future task")
 
         except Exception as e:
             logger.error(f"延迟启动调度器失败: {e}")
@@ -92,9 +117,9 @@ class LarkGroupDailyAnalysis(Star):
             config_manager.reload_config()
             logger.info(f"重新加载配置: 自动分析={config_manager.get_enable_auto_analysis()}")
 
-            # 重启调度器
-            await auto_scheduler.restart_scheduler()
-            logger.info("配置重载和调度器重启完成")
+            # TODO: Update auto_scheduler to use new architecture
+            # await auto_scheduler.restart_scheduler()
+            logger.info("配置重载完成")
 
         except Exception as e:
             logger.error(f"重新加载配置失败: {e}")
@@ -107,54 +132,58 @@ class LarkGroupDailyAnalysis(Star):
         用法: /历史消息示例 [天数]
         """
         import time
-        from .src.core.feishu_history_sdk import fetch_feishu_history_via_sdk
+        
+        # Check if plugin is available
+        if lark_client_manager is None or not lark_client_manager.is_available():
+            yield event.plain_result("❌ 插件未启用：未找到 Lark 平台适配器。请先配置 Lark 平台。")
+            return
+        
         if not isinstance(event, LarkMessageEvent):
             yield event.plain_result("❌ 此功能仅支持飞书群聊")
             return
+            
         group_id = event.get_group_id()
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
-        # 获取 lark.Client 实例，兼容 lark_api、client 属性和直接实例
-        from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
-        lark_client = None
-        for p in self.context.platform_manager.get_insts():
-            if not isinstance(p, LarkPlatformAdapter):
-                continue
-            if hasattr(p, "lark_api"):
-                lark_client = p.lark_api
-                break
-            elif hasattr(p, "client"):
-                lark_client = p.client
-                break
-            elif hasattr(p, "im") and hasattr(p, "v1"):
-                lark_client = p
-                break
-        if not lark_client:
-            yield event.plain_result("❌ 未找到 Lark SDK 客户端实例")
-            return
-        end_time = int(time.time())
-        start_time = 0 # end_time - days * 86400
+        
         try:
-            msgs = await fetch_feishu_history_via_sdk(
-                lark_client, group_id, start_time, end_time, page_size=20, container_id_type='chat'
+            # Fetch messages using new architecture
+            raw_messages = await message_fetcher.fetch_messages(
+                chat_id=group_id,
+                days=days,
+                max_messages=20,
+                container_id_type='chat'
             )
-            if not msgs:
+            
+            if not raw_messages:
                 yield event.plain_result("❌ 未获取到历史消息")
                 return
-            # 格式化展示部分消息内容（兼容 lark_oapi SDK Message 对象）
+            
+            # Parse messages
+            parsed_messages = []
+            for msg in raw_messages[:5]:
+                parsed_msg = await message_parser.parse_message(msg)
+                if parsed_msg:
+                    parsed_messages.append(parsed_msg)
+            
+            if not parsed_messages:
+                yield event.plain_result("❌ 无法解析历史消息")
+                return
+            
+            # Format preview
             preview = []
-            for m in msgs[:5]:
-                msg_id = getattr(m, 'message_id', '')
-                sender = getattr(getattr(m, 'sender_id', None), 'open_id', '')
-                msg_type = getattr(m, 'msg_type', '')
-                content = getattr(getattr(m, 'body', None), 'content', '')
-                create_time = int(getattr(m, 'create_time', 0)) // 1000
-                tstr = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(create_time))
-                preview.append(f"[{tstr}] {sender} ({msg_type}): {content}")
+            for msg in parsed_messages:
+                tstr = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(msg.timestamp))
+                preview.append(
+                    f"[{tstr}] {msg.sender_name} ({msg.message_type}): "
+                    f"{msg.content[:100]}{'...' if len(msg.content) > 100 else ''}"
+                )
+            
             yield event.plain_result("\n".join(preview))
+            
         except Exception as e:
-            logger.error(f"历史消息获取失败: {e}")
+            logger.error(f"历史消息获取失败: {e}", exc_info=True)
             yield event.plain_result(f"❌ 历史消息获取失败: {e}")
 
     @filter.command("群分析")
@@ -164,6 +193,11 @@ class LarkGroupDailyAnalysis(Star):
         分析群聊日常活动
         用法: /群分析 [天数]
         """
+        # Check if plugin is available
+        if lark_client_manager is None or not lark_client_manager.is_available():
+            yield event.plain_result("❌ 插件未启用：未找到 Lark 平台适配器。请先配置 Lark 平台。")
+            return
+        
         if not isinstance(event, LarkMessageEvent):
             yield event.plain_result("❌ 此功能仅支持飞书群聊")
             return
@@ -173,9 +207,6 @@ class LarkGroupDailyAnalysis(Star):
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
 
-        # 更新bot实例（用于手动命令）
-        bot_manager.update_from_event(event)
-
         # 检查群组权限
         enabled_groups = config_manager.get_enabled_groups()
         if enabled_groups and group_id not in enabled_groups:
@@ -183,44 +214,132 @@ class LarkGroupDailyAnalysis(Star):
             return
 
         # 设置分析天数
-        analysis_days = days if days and 1 <= days <= 7 else config_manager.get_analysis_days()
+        analysis_days = days if days and 1 <= days <= 30 else config_manager.get_analysis_days()
 
         yield event.plain_result(f"🔍 开始分析群聊近{analysis_days}天的活动，请稍候...")
 
-        # 调试：输出当前配置
         logger.info(f"当前输出格式配置: {config_manager.get_output_format()}")
 
         try:
-            # 获取群聊消息
-            messages = await message_analyzer.message_handler.fetch_group_messages(bot_manager.get_bot_instance(), group_id, analysis_days)
-            if not messages:
+            # Step 1: Fetch raw messages using new message fetcher
+            raw_messages = await message_fetcher.fetch_messages(
+                chat_id=group_id,
+                days=analysis_days,
+                max_messages=config_manager.get_max_messages(),
+                container_id_type='chat'
+            )
+            
+            if not raw_messages:
                 yield event.plain_result("❌ 未找到足够的群聊记录，请确保群内有足够的消息历史")
                 return
 
-            # 检查消息数量是否足够分析
+            # Step 2: Parse messages into unified format
+            parsed_messages = []
+            for msg in raw_messages:
+                parsed_msg = await message_parser.parse_message(msg)
+                if parsed_msg:
+                    parsed_messages.append(parsed_msg)
+            
+            if not parsed_messages:
+                yield event.plain_result("❌ 无法解析群聊消息")
+                return
+
+            # Check message count threshold
             min_threshold = config_manager.get_min_messages_threshold()
-            if len(messages) < min_threshold:
-                yield event.plain_result(f"❌ 消息数量不足（{len(messages)}条），至少需要{min_threshold}条消息才能进行有效分析")
+            if len(parsed_messages) < min_threshold:
+                yield event.plain_result(
+                    f"❌ 消息数量不足（{len(parsed_messages)}条），"
+                    f"至少需要{min_threshold}条消息才能进行有效分析"
+                )
                 return
 
-            yield event.plain_result(f"📊 已获取{len(messages)}条消息，正在进行智能分析...")
+            yield event.plain_result(f"📊 已获取{len(parsed_messages)}条消息，正在进行智能分析...")
 
-            # 进行分析 - 传递 unified_msg_origin 以获取正确的 LLM 提供商
-            analysis_result = await message_analyzer.analyze_messages(messages, group_id, event.unified_msg_origin)
+            # Step 3: Perform analysis using new analyzers
+            from .src.models import AnalysisResult, TokenUsage
+            from datetime import datetime
+            
+            # Get unified_msg_origin for LLM provider
+            umo = event.unified_msg_origin
+            
+            # Analyze topics
+            topics = []
+            topics_token_usage = TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+            if config_manager.get_topic_analysis_enabled():
+                try:
+                    topics, topics_token_usage = await topics_analyzer.analyze(parsed_messages, umo)
+                    logger.info(f"Topics analysis complete: {len(topics)} topics found")
+                except Exception as e:
+                    logger.error(f"Topics analysis failed: {e}", exc_info=True)
+            
+            # Analyze users
+            user_titles = []
+            users_token_usage = TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+            if config_manager.get_user_title_analysis_enabled():
+                try:
+                    user_titles, users_token_usage = await users_analyzer.analyze(parsed_messages, umo)
+                    logger.info(f"Users analysis complete: {len(user_titles)} titles assigned")
+                except Exception as e:
+                    logger.error(f"Users analysis failed: {e}", exc_info=True)
+            
+            # Extract quotes
+            quotes = []
+            quotes_token_usage = TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+            try:
+                quotes, quotes_token_usage = await quotes_analyzer.analyze(parsed_messages, umo)
+                logger.info(f"Quotes analysis complete: {len(quotes)} quotes extracted")
+            except Exception as e:
+                logger.error(f"Quotes analysis failed: {e}", exc_info=True)
+            
+            # Calculate statistics
+            statistics = statistics_calculator.calculate(parsed_messages)
+            logger.info(f"Statistics calculated: {statistics.message_count} messages")
+            
+            # Aggregate token usage
+            total_token_usage = TokenUsage(
+                prompt_tokens=(
+                    topics_token_usage.prompt_tokens +
+                    users_token_usage.prompt_tokens +
+                    quotes_token_usage.prompt_tokens
+                ),
+                completion_tokens=(
+                    topics_token_usage.completion_tokens +
+                    users_token_usage.completion_tokens +
+                    quotes_token_usage.completion_tokens
+                ),
+                total_tokens=(
+                    topics_token_usage.total_tokens +
+                    users_token_usage.total_tokens +
+                    quotes_token_usage.total_tokens
+                )
+            )
+            
+            # Determine analysis period
+            if parsed_messages:
+                timestamps = [msg.timestamp for msg in parsed_messages]
+                start_time = datetime.fromtimestamp(min(timestamps))
+                end_time = datetime.fromtimestamp(max(timestamps))
+            else:
+                start_time = datetime.now()
+                end_time = datetime.now()
+            
+            # Create analysis result
+            analysis_result = AnalysisResult(
+                topics=topics,
+                user_titles=user_titles,
+                quotes=quotes,
+                statistics=statistics,
+                token_usage=total_token_usage,
+                analysis_period=(start_time, end_time)
+            )
 
-            # 检查分析结果
-            if not analysis_result or not analysis_result.get("statistics"):
-                yield event.plain_result("❌ 分析过程中出现错误，请稍后重试")
-                return
-
-            # 生成报告
+            # Step 4: Generate report
             output_format = config_manager.get_output_format()
             if output_format == "image":
                 image_url = await report_generator.generate_image_report(analysis_result, group_id, self.html_render)
                 if image_url:
                     yield event.image_result(image_url)
                 else:
-                    # 如果图片生成失败，回退到文本报告
                     logger.warning("图片报告生成失败，回退到文本报告")
                     text_report = report_generator.generate_text_report(analysis_result)
                     yield event.plain_result(f"⚠️ 图片报告生成失败，以下是文本版本：\n\n{text_report}")
@@ -231,21 +350,18 @@ class LarkGroupDailyAnalysis(Star):
 
                 pdf_path = await report_generator.generate_pdf_report(analysis_result, group_id)
                 if pdf_path:
-                    # 发送 PDF 文件
                     from pathlib import Path
                     pdf_file = File(name=Path(pdf_path).name, file=pdf_path)
                     result = event.make_result()
                     result.chain.append(pdf_file)
                     yield result
                 else:
-                    # 如果 PDF 生成失败，提供详细的错误信息和解决方案
                     yield event.plain_result("❌ PDF 报告生成失败")
                     yield event.plain_result("🔧 可能的解决方案：")
                     yield event.plain_result("1. 使用 /安装PDF 命令重新安装依赖")
                     yield event.plain_result("2. 检查网络连接是否正常")
                     yield event.plain_result("3. 暂时使用图片格式：/设置格式 image")
 
-                    # 回退到文本报告
                     logger.warning("PDF 报告生成失败，回退到文本报告")
                     text_report = report_generator.generate_text_report(analysis_result)
                     yield event.plain_result(f"\n📝 以下是文本版本的分析报告：\n\n{text_report}")
@@ -348,9 +464,8 @@ class LarkGroupDailyAnalysis(Star):
             if group_id not in enabled_groups:
                 config_manager.add_enabled_group(group_id)
                 yield event.plain_result("✅ 已为当前群启用日常分析功能")
-
-                # 重新启动定时任务
-                await auto_scheduler.restart_scheduler()
+                # TODO: Update auto_scheduler to use new architecture
+                # await auto_scheduler.restart_scheduler()
             else:
                 yield event.plain_result("ℹ️ 当前群已启用日常分析功能")
 
@@ -359,16 +474,17 @@ class LarkGroupDailyAnalysis(Star):
             if group_id in enabled_groups:
                 config_manager.remove_enabled_group(group_id)
                 yield event.plain_result("✅ 已为当前群禁用日常分析功能")
-
-                # 重新启动定时任务
-                await auto_scheduler.restart_scheduler()
+                # TODO: Update auto_scheduler to use new architecture
+                # await auto_scheduler.restart_scheduler()
             else:
                 yield event.plain_result("ℹ️ 当前群未启用日常分析功能")
 
         elif action == "reload":
-            # 重新启动定时任务
-            await auto_scheduler.restart_scheduler()
-            yield event.plain_result("✅ 已重新加载配置并重启定时任务")
+            # 重新加载配置
+            config_manager.reload_config()
+            # TODO: Update auto_scheduler to use new architecture
+            # await auto_scheduler.restart_scheduler()
+            yield event.plain_result("✅ 已重新加载配置")
 
         elif action == "test":
             # 测试自动分析功能
@@ -377,17 +493,8 @@ class LarkGroupDailyAnalysis(Star):
                 yield event.plain_result("❌ 请先启用当前群的分析功能")
                 return
 
-            yield event.plain_result("🧪 开始测试自动分析功能...")
-
-            # 更新bot实例（用于测试）
-            bot_manager.update_from_event(event)
-
-            # 执行自动分析
-            try:
-                await auto_scheduler._perform_auto_analysis_for_group(group_id)
-                yield event.plain_result("✅ 自动分析测试完成，请查看群消息")
-            except Exception as e:
-                yield event.plain_result(f"❌ 自动分析测试失败: {str(e)}")
+            yield event.plain_result("🧪 测试功能将在自动调度器更新后可用")
+            # TODO: Implement test functionality with new architecture
 
         else:  # status
             enabled_groups = config_manager.get_enabled_groups()

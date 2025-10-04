@@ -4,9 +4,15 @@
 """
 
 from .llm_analyzer import LLMAnalyzer
-from .statistics import UserAnalyzer
+from .statistics import StatisticsCalculator
+from .topics import TopicsAnalyzer
+from .users import UsersAnalyzer
+from .quotes import QuotesAnalyzer
 
 __all__ = [
     'LLMAnalyzer',
-    'UserAnalyzer'
+    'StatisticsCalculator',
+    'TopicsAnalyzer',
+    'UsersAnalyzer',
+    'QuotesAnalyzer',
 ]

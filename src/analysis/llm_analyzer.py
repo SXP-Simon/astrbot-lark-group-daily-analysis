@@ -9,7 +9,7 @@ from datetime import datetime
 import asyncio
 from typing import List, Dict, Tuple
 from astrbot.api import logger
-from ..models.data_models import SummaryTopic, UserTitle, GoldenQuote, TokenUsage
+from ..models import Topic, UserTitle, Quote, TokenUsage
 
 
 class LLMAnalyzer:
@@ -127,7 +127,7 @@ class LLMAnalyzer:
         logger.error(f"LLM请求全部重试失败: {last_exc}")
         return None
 
-    async def analyze_topics(self, messages: List[Dict], umo: str = None) -> Tuple[List[SummaryTopic], TokenUsage]:
+    async def analyze_topics(self, messages: List[Dict], umo: str = None) -> Tuple[List[Topic], TokenUsage]:
         """使用LLM分析话题"""
         try:
             # 提取文本消息
@@ -247,7 +247,15 @@ class LLMAnalyzer:
                     logger.debug(f"修复后的JSON: {json_text[:300]}...")
 
                     topics_data = json.loads(json_text)
-                    topics = [SummaryTopic(**topic) for topic in topics_data[:max_topics]]
+                    # Convert to Topic objects with proper field mapping
+                    topics = []
+                    for topic_data in topics_data[:max_topics]:
+                        topics.append(Topic(
+                            title=topic_data.get('topic', ''),
+                            participants=topic_data.get('contributors', []),
+                            description=topic_data.get('detail', ''),
+                            message_count=0  # Will be calculated later if needed
+                        ))
                     logger.info(f"话题分析成功，解析到 {len(topics)} 个话题")
                     return topics, token_usage
                 else:
@@ -265,10 +273,11 @@ class LLMAnalyzer:
                 else:
                     # 最后的降级方案
                     logger.info("正则表达式提取失败，使用默认话题...")
-                    return [SummaryTopic(
-                        topic="群聊讨论",
-                        contributors=["群友"],
-                        detail="今日群聊内容丰富，涵盖多个话题"
+                    return [Topic(
+                        title="群聊讨论",
+                        participants=["群友"],
+                        description="今日群聊内容丰富，涵盖多个话题",
+                        message_count=0
                     )], token_usage
 
             return [], token_usage
@@ -321,7 +330,7 @@ class LLMAnalyzer:
 
         return text
 
-    def _extract_topics_with_regex(self, result_text: str, max_topics: int) -> List[SummaryTopic]:
+    def _extract_topics_with_regex(self, result_text: str, max_topics: int) -> List[Topic]:
         """使用正则表达式提取话题信息"""
         try:
             topics = []
@@ -352,10 +361,11 @@ class LLMAnalyzer:
                 if not contributors:
                     contributors = ["群友"]
 
-                topics.append(SummaryTopic(
-                    topic=topic_name,
-                    contributors=contributors[:5],  # 最多5个参与者
-                    detail=detail
+                topics.append(Topic(
+                    title=topic_name,
+                    participants=contributors[:5],  # 最多5个参与者
+                    description=detail,
+                    message_count=0
                 ))
 
             return topics
@@ -476,7 +486,7 @@ class LLMAnalyzer:
             logger.error(f"用户称号分析失败: {e}")
             return [], TokenUsage()
 
-    async def analyze_golden_quotes(self, messages: List[Dict], umo: str = None) -> Tuple[List[GoldenQuote], TokenUsage]:
+    async def analyze_golden_quotes(self, messages: List[Dict], umo: str = None) -> Tuple[List[Quote], TokenUsage]:
         """使用LLM分析群聊金句"""
         try:
             # 提取有趣的文本消息
@@ -568,7 +578,17 @@ class LLMAnalyzer:
                 if json_match:
                     logger.debug(f"金句分析JSON原文: {json_match.group()[:500]}...")
                     quotes_data = json.loads(json_match.group())
-                    return [GoldenQuote(**quote) for quote in quotes_data[:max_golden_quotes]], token_usage
+                    # Convert to Quote objects with proper field mapping
+                    quotes = []
+                    for quote_data in quotes_data[:max_golden_quotes]:
+                        quotes.append(Quote(
+                            content=quote_data.get('content', ''),
+                            sender_name=quote_data.get('sender', ''),
+                            sender_avatar='',  # Will be filled later
+                            timestamp=0,  # Will be filled later
+                            reason=quote_data.get('reason', '')
+                        ))
+                    return quotes, token_usage
             except Exception as e:
                 logger.error(f"金句分析JSON解析失败: {e}")
                 logger.debug(f"原始响应: {result_text}")
