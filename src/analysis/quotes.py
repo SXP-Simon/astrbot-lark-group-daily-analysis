@@ -74,9 +74,11 @@ class QuotesAnalyzer:
             
             # Parse response
             result_text = self._extract_response_text(response)
+            logger.debug(f"金句分析原始响应（前500字符）: {result_text[:500]}...")
             
             # Parse JSON and create Quote objects
             quotes = self._parse_quotes_response(result_text, quality_messages, max_quotes)
+            logger.info(f"金句解析结果: 成功提取 {len(quotes)} 条金句")
             
             logger.info(f"Quote extraction completed: {len(quotes)} quotes extracted")
             return quotes, token_usage
@@ -96,6 +98,13 @@ class QuotesAnalyzer:
             过滤后的高质量消息列表
         """
         quality_messages = []
+        filtered_stats = {
+            'too_short': 0,
+            'too_long': 0,
+            'starts_with_url': 0,
+            'too_many_emojis': 0,
+            'passed': 0
+        }
         
         for msg in messages:
             content = msg.content.strip()
@@ -110,10 +119,17 @@ class QuotesAnalyzer:
             
             # Skip very short messages (less than 10 characters)
             if len(content) < 10:
+                filtered_stats['too_short'] += 1
+                continue
+            
+            # Skip very long messages (more than 200 characters)
+            if len(content) > 200:
+                filtered_stats['too_long'] += 1
                 continue
             
             # Skip messages that are just URLs
             if content.startswith('http://') or content.startswith('https://'):
+                filtered_stats['starts_with_url'] += 1
                 continue
             
             # Skip messages that are mostly emojis
@@ -130,11 +146,22 @@ class QuotesAnalyzer:
             )
             emoji_count = len(emoji_pattern.findall(content))
             if emoji_count > len(content) / 3:  # More than 1/3 emojis
+                filtered_stats['too_many_emojis'] += 1
                 continue
             
+            filtered_stats['passed'] += 1
             quality_messages.append(msg)
         
-        logger.info(f"Filtered {len(quality_messages)} quality messages from {len(messages)} total")
+        logger.info(f"消息过滤统计: 总消息={len(messages)}, 通过={filtered_stats['passed']}, "
+                   f"太短={filtered_stats['too_short']}, 太长={filtered_stats['too_long']}, "
+                   f"URL={filtered_stats['starts_with_url']}, 表情过多={filtered_stats['too_many_emojis']}")
+        
+        # 如果通过的消息太少，输出一些示例
+        if filtered_stats['passed'] < 10:
+            logger.info(f"通过过滤的消息示例（前3条）:")
+            for i, msg in enumerate(quality_messages[:3]):
+                logger.info(f"  {i+1}. [{msg.sender_name}] {msg.content[:80]}...")
+        
         return quality_messages
 
     def _format_messages_for_llm(self, messages: List[ParsedMessage]) -> str:
@@ -416,20 +443,33 @@ class QuotesAnalyzer:
             json_match = re.search(r'\[.*?\]', result_text, re.DOTALL)
             if json_match:
                 json_text = json_match.group()
-                logger.debug(f"Quote extraction JSON raw: {json_text[:500]}...")
+                logger.info(f"找到 JSON 格式，长度: {len(json_text)} 字符")
+                logger.debug(f"金句提取 JSON 原文（前500字符）: {json_text[:500]}...")
 
                 # Fix and clean JSON
                 json_text = self._fix_json(json_text)
-                logger.debug(f"Fixed JSON: {json_text[:300]}...")
+                logger.debug(f"修复后的 JSON（前300字符）: {json_text[:300]}...")
 
                 quotes_data = json.loads(json_text)
+                logger.info(f"JSON 解析成功，包含 {len(quotes_data)} 个金句对象")
                 quotes = []
                 
-                for quote_dict in quotes_data[:max_quotes]:
+                for idx, quote_dict in enumerate(quotes_data[:max_quotes]):
+                    logger.debug(f"处理第 {idx+1} 个金句: {quote_dict}")
+                    
                     sender_name = quote_dict.get("sender_name", "Unknown")
                     content = quote_dict.get("content", "")
                     reason = quote_dict.get("reason", "")
                     timestamp = quote_dict.get("timestamp", 0)
+                    
+                    # 验证必需字段
+                    if not content:
+                        logger.warning(f"第 {idx+1} 个金句缺少 content 字段，跳过")
+                        continue
+                    
+                    if not sender_name or sender_name == "Unknown":
+                        logger.warning(f"第 {idx+1} 个金句缺少 sender_name 字段，跳过")
+                        continue
                     
                     # Get sender avatar from lookup map
                     sender_info = sender_map.get(sender_name, {})
@@ -447,22 +487,31 @@ class QuotesAnalyzer:
                         reason=reason
                     )
                     quotes.append(quote)
+                    logger.debug(f"成功添加金句: {sender_name}: {content[:50]}...")
                 
-                logger.info(f"Successfully parsed {len(quotes)} quotes")
+                if quotes:
+                    logger.info(f"成功解析 {len(quotes)} 条金句")
+                else:
+                    logger.warning(f"JSON 解析成功但没有提取到有效金句。原始数据包含 {len(quotes_data)} 个对象")
                 return quotes
             else:
-                logger.warning(f"No JSON format found in response: {result_text[:200]}...")
+                logger.warning(f"响应中未找到 JSON 格式")
+                logger.info(f"完整响应内容: {result_text}")
         except json.JSONDecodeError as e:
-            logger.error(f"Quote extraction JSON parsing failed: {e}")
-            logger.debug(f"Fixed JSON: {json_text if 'json_text' in locals() else 'N/A'}")
-            logger.debug(f"Raw response: {result_text}")
+            logger.error(f"金句提取 JSON 解析失败: {e}")
+            logger.error(f"修复后的 JSON: {json_text if 'json_text' in locals() else 'N/A'}")
+            logger.error(f"原始响应: {result_text}")
 
             # Fallback: try regex extraction
+            logger.info("尝试使用正则表达式提取金句...")
             quotes = self._extract_quotes_with_regex(result_text, sender_map, max_quotes)
             if quotes:
-                logger.info(f"Regex extraction successful: {len(quotes)} quotes")
+                logger.info(f"正则表达式提取成功: {len(quotes)} 条金句")
                 return quotes
+            else:
+                logger.warning("正则表达式提取也失败了")
 
+        logger.warning("所有金句提取方法都失败，返回空列表")
         return []
 
     def _fix_json(self, text: str) -> str:
