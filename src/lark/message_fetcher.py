@@ -5,7 +5,7 @@
 """
 
 from typing import List
-from datetime import datetime
+from datetime import datetime, timedelta
 from lark_oapi.api.im.v1 import ListMessageRequest
 from astrbot.api import logger
 
@@ -57,7 +57,7 @@ class MessageFetcher:
 
             # 计算时间范围
             end_time = datetime.now()
-            start_timestamp = 0 # int((end_time - datetime.timedelta(days=days)).timestamp())
+            start_timestamp = int((end_time - timedelta(days=days)).timestamp())
             end_timestamp = int(end_time.timestamp())
 
             logger.info(
