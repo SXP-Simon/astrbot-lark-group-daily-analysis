@@ -13,7 +13,6 @@ from astrbot.api.event import filter
 from astrbot.api.star import Context, Star
 from astrbot.api import logger, AstrBotConfig
 from astrbot.core.platform.sources.lark.lark_event import LarkMessageEvent
-from astrbot.core.message.components import File
 from astrbot.core.star.filter.permission import PermissionType
 
 # 导入重构后的模块
@@ -147,6 +146,85 @@ class LarkGroupDailyAnalysis(Star):
 
         except Exception as e:
             logger.error(f"重新加载配置失败: {e}", exc_info=True)
+
+    async def _send_lark_file(self, chat_id: str, file_path: str):
+        """使用飞书SDK发送文件"""
+        try:
+            from lark_oapi.api.im.v1 import (
+                CreateMessageRequest,
+                CreateMessageRequestBody,
+                CreateFileRequest,
+                CreateFileRequestBody,
+            )
+            import json
+            import io
+            from pathlib import Path
+
+            # 获取飞书客户端
+            client = lark_client_manager.get_client()
+
+            # 检查文件是否存在
+            file_path_obj = Path(file_path)
+            if not file_path_obj.exists():
+                logger.error(f"文件不存在: {file_path}")
+                raise FileNotFoundError(f"文件不存在: {file_path}")
+
+            # 读取文件
+            logger.info(f"开始读取文件: {file_path}")
+            with open(file_path, "rb") as f:
+                file_data = f.read()
+
+            # 上传文件到飞书
+            logger.info("开始上传文件到飞书")
+            upload_request = (
+                CreateFileRequest.builder()
+                .request_body(
+                    CreateFileRequestBody.builder()
+                    .file_type("pdf" if file_path.endswith(".pdf") else "stream")
+                    .file_name(file_path_obj.name)
+                    .file(io.BytesIO(file_data))
+                    .build()
+                )
+                .build()
+            )
+
+            upload_response = client.im.v1.file.create(upload_request)
+
+            if not upload_response.success():
+                error_msg = f"上传文件到飞书失败: code={upload_response.code}, msg={upload_response.msg}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+
+            # 获取文件key
+            file_key = upload_response.data.file_key
+            logger.info(f"文件上传成功，file_key={file_key}")
+
+            # 发送文件消息
+            message_request = (
+                CreateMessageRequest.builder()
+                .receive_id_type("chat_id")
+                .request_body(
+                    CreateMessageRequestBody.builder()
+                    .receive_id(chat_id)
+                    .msg_type("file")
+                    .content(json.dumps({"file_key": file_key}))
+                    .build()
+                )
+                .build()
+            )
+
+            message_response = client.im.v1.message.create(message_request)
+
+            if not message_response.success():
+                error_msg = f"发送飞书文件消息失败: code={message_response.code}, msg={message_response.msg}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+
+            logger.info(f"飞书文件消息发送成功: chat_id={chat_id}")
+
+        except Exception as e:
+            logger.error(f"发送飞书文件失败: {e}", exc_info=True)
+            raise
 
     async def terminate(self):
         """插件被卸载/停用时调用，清理资源"""
@@ -448,12 +526,15 @@ class LarkGroupDailyAnalysis(Star):
                     analysis_result, group_id
                 )
                 if pdf_path:
-                    from pathlib import Path
-
-                    pdf_file = File(name=Path(pdf_path).name, file=pdf_path)
-                    result = event.make_result()
-                    result.chain.append(pdf_file)
-                    yield result
+                    # 使用飞书SDK直接发送文件
+                    try:
+                        yield event.plain_result("📊 PDF报告生成成功，正在发送...")
+                        await self._send_lark_file(group_id, pdf_path)
+                        yield event.plain_result("✅ PDF报告已发送")
+                    except Exception as e:
+                        logger.error(f"发送PDF文件失败: {e}", exc_info=True)
+                        yield event.plain_result(f"❌ PDF文件发送失败: {str(e)}")
+                        yield event.plain_result(f"📁 PDF文件已保存至: {pdf_path}")
                 else:
                     yield event.plain_result("❌ PDF 报告生成失败")
                     yield event.plain_result("🔧 可能的解决方案：")
