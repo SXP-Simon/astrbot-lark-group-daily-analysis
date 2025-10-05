@@ -1,4 +1,4 @@
-"""
+﻿"""
 飞书群日常分析插件
 基于群聊记录生成精美的日常分析报告，包含话题总结、用户画像、统计数据等
 
@@ -273,7 +273,7 @@ class LarkGroupDailyAnalysis(Star):
             logger.error(f"插件资源清理失败: {e}", exc_info=True)
 
     @filter.command("历史消息示例")
-    @filter.permission_type(PermissionType.ADMIN)
+
     async def show_history_example(self, event: LarkMessageEvent, days: int = 1):
         """
         获取并展示飞书群历史消息示例
@@ -333,7 +333,7 @@ class LarkGroupDailyAnalysis(Star):
             yield event.plain_result(f"❌ 历史消息获取失败: {e}")
 
     @filter.command("群分析")
-    @filter.permission_type(PermissionType.ADMIN)
+
     async def analyze_group_daily(
         self, event: LarkMessageEvent, days: Optional[int] = None
     ):
@@ -558,7 +558,7 @@ class LarkGroupDailyAnalysis(Star):
             )
 
     @filter.command("设置格式")
-    @filter.permission_type(PermissionType.ADMIN)
+
     async def set_output_format(self, event: LarkMessageEvent, format_type: str = ""):
         """
         设置分析报告输出格式
@@ -603,7 +603,7 @@ class LarkGroupDailyAnalysis(Star):
         yield event.plain_result(f"✅ 输出格式已设置为: {format_type}")
 
     @filter.command("安装PDF")
-    @filter.permission_type(PermissionType.ADMIN)
+
     async def install_pdf_deps(self, event: LarkMessageEvent):
         """
         安装 PDF 功能依赖
@@ -625,7 +625,7 @@ class LarkGroupDailyAnalysis(Star):
             yield event.plain_result(f"❌ 安装过程中出现错误: {str(e)}")
 
     @filter.command("分析设置")
-    @filter.permission_type(PermissionType.ADMIN)
+
     async def analysis_settings(self, event: LarkMessageEvent, action: str = "status"):
         """
         管理分析设置
