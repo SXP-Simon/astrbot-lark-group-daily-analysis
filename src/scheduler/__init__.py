@@ -3,6 +3,6 @@
 包含定时任务和自动分析功能
 """
 
-from .auto_scheduler import AutoScheduler
+from .lark_auto_scheduler import LarkAutoScheduler
 
-__all__ = ["AutoScheduler"]
+__all__ = ["LarkAutoScheduler"]

@@ -33,3 +33,4 @@ src/lark/__pycache__/__init__.cpython-310.pyc
 src/lark/__pycache__/client.cpython-310.pyc
 src/lark/__pycache__/message_fetcher.cpython-310.pyc
 src/utils/__pycache__/llm_helper.cpython-310.pyc
+src/scheduler/__pycache__/lark_auto_scheduler.cpython-310.pyc

@@ -27,6 +27,7 @@ from .src.analysis.users import UsersAnalyzer
 from .src.analysis.quotes import QuotesAnalyzer
 from .src.analysis.statistics import StatisticsCalculator
 from .src.reports.generators import ReportGenerator
+from .src.scheduler.lark_auto_scheduler import LarkAutoScheduler
 from .src.utils.pdf_utils import PDFInstaller
 
 
@@ -89,9 +90,25 @@ class LarkGroupDailyAnalysis(Star):
             report_generator = ReportGenerator(config_manager)
             logger.info("报告生成器已初始化")
 
-            # 初始化自动调度器（如果需要）
-            # TODO: 更新auto_scheduler以使用新架构
-            # auto_scheduler = AutoScheduler(...)
+            # 初始化自动调度器
+            auto_scheduler = LarkAutoScheduler(
+                config_manager=config_manager,
+                lark_client_manager=lark_client_manager,
+                message_fetcher=message_fetcher,
+                message_parser=message_parser,
+                topics_analyzer=topics_analyzer,
+                users_analyzer=users_analyzer,
+                quotes_analyzer=quotes_analyzer,
+                statistics_calculator=statistics_calculator,
+                report_generator=report_generator,
+                context=context,
+                html_render_func=self.html_render,
+            )
+            logger.info("自动调度器已初始化")
+
+            # 延迟启动自动调度器
+            if config_manager.get_enable_auto_analysis():
+                asyncio.create_task(self._delayed_start_scheduler())
 
             logger.info("飞书群日常分析插件已初始化（重构版本）")
 
@@ -105,12 +122,12 @@ class LarkGroupDailyAnalysis(Star):
             # 等待10秒让系统完全初始化
             await asyncio.sleep(10)
 
-            # TODO: 更新auto_scheduler以使用新架构
-            # await auto_scheduler.start_scheduler()
-            logger.info("自动调度器将在未来的任务中实现")
+            # 启动自动调度器
+            await auto_scheduler.start_scheduler()
+            logger.info("自动调度器已启动")
 
         except Exception as e:
-            logger.error(f"延迟启动调度器失败: {e}")
+            logger.error(f"延迟启动调度器失败: {e}", exc_info=True)
 
     async def _reload_config_and_restart_scheduler(self):
         """重新加载配置并重启调度器"""
@@ -121,12 +138,61 @@ class LarkGroupDailyAnalysis(Star):
                 f"重新加载配置: 自动分析={config_manager.get_enable_auto_analysis()}"
             )
 
-            # TODO: 更新auto_scheduler以使用新架构
-            # await auto_scheduler.restart_scheduler()
+            # 重启自动调度器
+            if auto_scheduler:
+                await auto_scheduler.restart_scheduler()
+                logger.info("自动调度器已重启")
+
             logger.info("配置重载完成")
 
         except Exception as e:
-            logger.error(f"重新加载配置失败: {e}")
+            logger.error(f"重新加载配置失败: {e}", exc_info=True)
+
+    async def terminate(self):
+        """插件被卸载/停用时调用，清理资源"""
+        try:
+            logger.info("开始清理飞书群日常分析插件资源...")
+
+            global config_manager, lark_client_manager, user_info_cache
+            global message_fetcher, message_parser
+            global \
+                topics_analyzer, \
+                users_analyzer, \
+                quotes_analyzer, \
+                statistics_calculator
+            global report_generator, auto_scheduler
+
+            # 停止自动调度器（如果已初始化）
+            if auto_scheduler:
+                logger.info("正在停止自动调度器...")
+                await auto_scheduler.stop_scheduler()
+                logger.info("自动调度器已停止")
+
+            # 清理用户信息缓存
+            if user_info_cache:
+                logger.info("正在清理用户信息缓存...")
+                # 清空缓存
+                if hasattr(user_info_cache, "_cache"):
+                    user_info_cache._cache.clear()
+                logger.info("用户信息缓存已清理")
+
+            # 重置全局变量
+            config_manager = None
+            lark_client_manager = None
+            user_info_cache = None
+            message_fetcher = None
+            message_parser = None
+            topics_analyzer = None
+            users_analyzer = None
+            quotes_analyzer = None
+            statistics_calculator = None
+            report_generator = None
+            auto_scheduler = None
+
+            logger.info("飞书群日常分析插件资源清理完成")
+
+        except Exception as e:
+            logger.error(f"插件资源清理失败: {e}", exc_info=True)
 
     @filter.command("历史消息示例")
     @filter.permission_type(PermissionType.ADMIN)
@@ -503,8 +569,9 @@ class LarkGroupDailyAnalysis(Star):
             if group_id not in enabled_groups:
                 config_manager.add_enabled_group(group_id)
                 yield event.plain_result("✅ 已为当前群启用日常分析功能")
-                # TODO: 更新auto_scheduler以使用新架构
-                # await auto_scheduler.restart_scheduler()
+                # 重启调度器以应用新配置
+                if auto_scheduler:
+                    await auto_scheduler.restart_scheduler()
             else:
                 yield event.plain_result("ℹ️ 当前群已启用日常分析功能")
 
@@ -513,16 +580,18 @@ class LarkGroupDailyAnalysis(Star):
             if group_id in enabled_groups:
                 config_manager.remove_enabled_group(group_id)
                 yield event.plain_result("✅ 已为当前群禁用日常分析功能")
-                # TODO: 更新auto_scheduler以使用新架构
-                # await auto_scheduler.restart_scheduler()
+                # 重启调度器以应用新配置
+                if auto_scheduler:
+                    await auto_scheduler.restart_scheduler()
             else:
                 yield event.plain_result("ℹ️ 当前群未启用日常分析功能")
 
         elif action == "reload":
             # 重新加载配置
             config_manager.reload_config()
-            # TODO: 更新auto_scheduler以使用新架构
-            # await auto_scheduler.restart_scheduler()
+            # 重启调度器以应用新配置
+            if auto_scheduler:
+                await auto_scheduler.restart_scheduler()
             yield event.plain_result("✅ 已重新加载配置")
 
         elif action == "test":
@@ -532,8 +601,18 @@ class LarkGroupDailyAnalysis(Star):
                 yield event.plain_result("❌ 请先启用当前群的分析功能")
                 return
 
-            yield event.plain_result("🧪 测试功能将在自动调度器更新后可用")
-            # TODO: 使用新架构实现测试功能
+            if not auto_scheduler:
+                yield event.plain_result("❌ 自动调度器未初始化")
+                return
+
+            yield event.plain_result("🧪 开始测试自动分析功能...")
+            try:
+                # 手动触发一次分析
+                await auto_scheduler._perform_auto_analysis_for_group(group_id)
+                yield event.plain_result("✅ 测试完成，请查看群消息")
+            except Exception as e:
+                logger.error(f"测试自动分析失败: {e}", exc_info=True)
+                yield event.plain_result(f"❌ 测试失败: {str(e)}")
 
         else:  # 状态查询
             enabled_groups = config_manager.get_enabled_groups()
