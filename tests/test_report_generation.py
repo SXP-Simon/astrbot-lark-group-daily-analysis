@@ -1,7 +1,7 @@
 """
-Tests for report generation.
+报告生成测试
 
-Tests Requirements: 10.1, 10.2, 10.3, 10.4, 10.5
+测试需求: 10.1, 10.2, 10.3, 10.4, 10.5
 """
 
 import asyncio
@@ -22,7 +22,7 @@ from src.models import (
 
 @pytest.fixture
 def sample_analysis_result():
-    """Create sample analysis result for testing"""
+    """创建测试用的示例分析结果"""
     topics = [
         Topic(
             title="Project Planning",
@@ -110,11 +110,11 @@ def sample_analysis_result():
 
 
 class TestReportGenerator:
-    """Test report generation functionality"""
+    """测试报告生成功能"""
     
     @pytest.mark.asyncio
     async def test_generate_text_report(self, sample_analysis_result):
-        """Test text format report generation"""
+        """测试文本格式报告生成"""
         mock_config = Mock()
         mock_config.get_output_format.return_value = "text"
         
@@ -143,7 +143,7 @@ class TestReportGenerator:
     
     @pytest.mark.asyncio
     async def test_text_report_includes_avatars_urls(self, sample_analysis_result):
-        """Verify text report includes avatar URLs"""
+        """验证文本报告包含头像URL"""
         mock_config = Mock()
         generator = ReportGenerator(mock_config)
         
@@ -154,7 +154,7 @@ class TestReportGenerator:
     
     @pytest.mark.asyncio
     async def test_text_report_displays_all_data(self, sample_analysis_result):
-        """Verify all analysis data is displayed in text report"""
+        """验证文本报告中显示所有分析数据"""
         mock_config = Mock()
         generator = ReportGenerator(mock_config)
         
@@ -175,7 +175,7 @@ class TestReportGenerator:
     
     @pytest.mark.asyncio
     async def test_generate_image_report(self, sample_analysis_result):
-        """Test image format report generation"""
+        """测试图片格式报告生成"""
         mock_config = Mock()
         mock_config.get_output_format.return_value = "image"
         
@@ -195,7 +195,7 @@ class TestReportGenerator:
     
     @pytest.mark.asyncio
     async def test_image_report_includes_avatars(self, sample_analysis_result):
-        """Verify image report includes user avatars"""
+        """验证图片报告包含用户头像"""
         mock_config = Mock()
         generator = ReportGenerator(mock_config)
         
@@ -214,7 +214,7 @@ class TestReportGenerator:
     
     @pytest.mark.asyncio
     async def test_image_report_fallback_on_error(self, sample_analysis_result):
-        """Verify fallback to text when image generation fails"""
+        """验证图片生成失败时回退到文本"""
         mock_config = Mock()
         generator = ReportGenerator(mock_config)
         
@@ -233,7 +233,7 @@ class TestReportGenerator:
     
     @pytest.mark.asyncio
     async def test_report_handles_empty_data(self):
-        """Verify report generation handles empty data gracefully"""
+        """验证报告生成优雅地处理空数据"""
         mock_config = Mock()
         generator = ReportGenerator(mock_config)
         
@@ -262,7 +262,7 @@ class TestReportGenerator:
     
     @pytest.mark.asyncio
     async def test_report_formats_timestamps(self, sample_analysis_result):
-        """Verify timestamps are formatted correctly"""
+        """验证时间戳格式正确"""
         mock_config = Mock()
         generator = ReportGenerator(mock_config)
         
@@ -273,7 +273,7 @@ class TestReportGenerator:
     
     @pytest.mark.asyncio
     async def test_report_includes_statistics_visualization(self, sample_analysis_result):
-        """Verify report includes or references statistics visualization"""
+        """验证报告包含或引用统计数据可视化"""
         mock_config = Mock()
         generator = ReportGenerator(mock_config)
         
@@ -284,11 +284,11 @@ class TestReportGenerator:
 
 
 class TestReportFormats:
-    """Test different report format outputs"""
+    """测试不同报告格式输出"""
     
     @pytest.mark.asyncio
     async def test_text_format_is_readable(self, sample_analysis_result):
-        """Verify text format is human-readable"""
+        """验证文本格式易于人类阅读"""
         mock_config = Mock()
         generator = ReportGenerator(mock_config)
         
@@ -305,7 +305,7 @@ class TestReportFormats:
     
     @pytest.mark.asyncio
     async def test_image_format_uses_html_template(self, sample_analysis_result):
-        """Verify image format uses HTML template"""
+        """验证图片格式使用HTML模板"""
         mock_config = Mock()
         generator = ReportGenerator(mock_config)
         

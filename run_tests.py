@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Test runner script for astrbot-lark-group-daily-analysis plugin.
+飞书群日常分析插件测试运行脚本
 
-This script runs all tests and provides a summary of results.
+此脚本运行所有测试并提供结果摘要
 """
 
 import sys
@@ -11,20 +11,20 @@ from pathlib import Path
 
 
 def check_dependencies():
-    """Check if required test dependencies are installed"""
+    """检查是否安装了所需的测试依赖"""
     try:
         import pytest
         import pytest_asyncio
         return True
     except ImportError:
-        print("❌ Missing test dependencies!")
-        print("\nPlease install required packages:")
+        print("❌ 缺少测试依赖！")
+        print("\n请安装所需的包：")
         print("  pip install pytest pytest-asyncio")
         return False
 
 
 def run_tests(verbose=True, coverage=False):
-    """Run the test suite"""
+    """运行测试套件"""
     if not check_dependencies():
         return False
     
@@ -41,7 +41,7 @@ def run_tests(verbose=True, coverage=False):
     cmd.append("--color=yes")
     
     print("=" * 70)
-    print("Running Test Suite for astrbot-lark-group-daily-analysis")
+    print("运行飞书群日常分析插件测试套件")
     print("=" * 70)
     print()
     
@@ -51,22 +51,22 @@ def run_tests(verbose=True, coverage=False):
     print()
     print("=" * 70)
     if result.returncode == 0:
-        print("✅ All tests passed!")
+        print("✅ 所有测试通过！")
     else:
-        print("❌ Some tests failed!")
+        print("❌ 一些测试失败！")
     print("=" * 70)
     
     return result.returncode == 0
 
 
 def run_specific_test(test_path):
-    """Run a specific test file or test"""
+    """运行特定的测试文件或测试"""
     if not check_dependencies():
         return False
     
     cmd = ["python", "-m", "pytest", test_path, "-v", "--color=yes"]
     
-    print(f"Running: {test_path}")
+    print(f"正在运行：{test_path}")
     print("=" * 70)
     
     result = subprocess.run(cmd, cwd=Path(__file__).parent)
@@ -75,26 +75,26 @@ def run_specific_test(test_path):
 
 
 def main():
-    """Main entry point"""
+    """主入口点"""
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="Run tests for astrbot-lark-group-daily-analysis plugin"
+        description="运行飞书群日常分析插件测试"
     )
     parser.add_argument(
         "--coverage",
         action="store_true",
-        help="Run tests with coverage report"
+        help="运行测试并生成覆盖率报告"
     )
     parser.add_argument(
         "--test",
         type=str,
-        help="Run specific test file or test (e.g., tests/test_lark_integration.py)"
+        help="运行特定的测试文件或测试（例如：tests/test_lark_integration.py）"
     )
     parser.add_argument(
         "--quiet",
         action="store_true",
-        help="Run tests in quiet mode"
+        help="以安静模式运行测试"
     )
     
     args = parser.parse_args()

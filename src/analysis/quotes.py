@@ -48,17 +48,17 @@ class QuotesAnalyzer:
             元组：(Quote 对象列表, TokenUsage)
         """
         try:
-            # Filter messages by length and content quality
+            # 按长度和内容质量过滤消息
             quality_messages = self._filter_quality_messages(messages)
 
             if not quality_messages:
                 logger.info("未找到适合提取金句的高质量消息")
                 return [], TokenUsage()
 
-            # Format messages with actual sender names
+            # 使用实际发送者名称格式化消息
             messages_text = self._format_messages_for_llm(quality_messages)
 
-            # Build LLM prompt
+            # 构建LLM提示词
             max_quotes = self.config_manager.get_max_golden_quotes()
             prompt = self._build_quotes_prompt(messages_text, max_quotes)
 
@@ -80,7 +80,7 @@ class QuotesAnalyzer:
             logger.info(f"=== 响应结束 ===")
             logger.debug(f"金句分析原始响应（前500字符）: {result_text[:500]}...")
 
-            # Parse JSON and create Quote objects
+            # 解析JSON并创建Quote对象
             quotes = self._parse_quotes_response(
                 result_text, quality_messages, max_quotes
             )
@@ -107,40 +107,40 @@ class QuotesAnalyzer:
         """
         quality_messages = []
         filtered_stats = {
-            "too_short": 0,
-            "too_long": 0,
-            "starts_with_url": 0,
-            "too_many_emojis": 0,
-            "passed": 0,
+            "too_short": 0,      # 太短
+            "too_long": 0,       # 太长
+            "starts_with_url": 0, # 以URL开头
+            "too_many_emojis": 0, # 表情过多
+            "passed": 0,         # 通过
         }
 
         for msg in messages:
             content = msg.content.strip()
 
-            # Skip empty messages
+            # 跳过空消息
             if not content:
                 continue
 
-            # Skip commands
+            # 跳过命令
             if content.startswith("/"):
                 continue
 
-            # Skip very short messages (less than 10 characters)
+            # 跳过很短的消息（少于10个字符）
             if len(content) < 10:
                 filtered_stats["too_short"] += 1
                 continue
 
-            # Skip very long messages (more than 200 characters)
+            # 跳过很长的消息（超过200个字符）
             if len(content) > 200:
                 filtered_stats["too_long"] += 1
                 continue
 
-            # Skip messages that are just URLs
+            # 跳过仅包含URL的消息
             if content.startswith("http://") or content.startswith("https://"):
                 filtered_stats["starts_with_url"] += 1
                 continue
 
-            # Skip messages that are mostly emojis
+            # 跳过主要是表情的消息
             emoji_pattern = re.compile(
                 "["
                 "\U0001f600-\U0001f64f"
@@ -153,7 +153,7 @@ class QuotesAnalyzer:
                 flags=re.UNICODE,
             )
             emoji_count = len(emoji_pattern.findall(content))
-            if emoji_count > len(content) / 3:  # More than 1/3 emojis
+            if emoji_count > len(content) / 3:  # 超过1/3是表情
                 filtered_stats["too_many_emojis"] += 1
                 continue
 
@@ -190,13 +190,13 @@ class QuotesAnalyzer:
         formatted_messages = []
 
         for msg in messages:
-            # Convert timestamp to readable time
+            # 转换时间戳为可读时间
             time_str = datetime.fromtimestamp(msg.timestamp).strftime("%H:%M")
 
-            # Clean message content
+            # 清理消息内容
             content = self._clean_message_content(msg.content)
 
-            # Format: [HH:MM] Username: content
+            # 格式: [HH:MM] 用户名: 内容
             formatted_messages.append(f"[{time_str}] {msg.sender_name}: {content}")
 
         return "\n".join(formatted_messages)
@@ -211,15 +211,15 @@ class QuotesAnalyzer:
         Returns:
             清理后的内容
         """
-        # Replace Chinese quotes with English quotes
+        # 将中文引号替换为英文引号
         content = content.replace('"', '"').replace('"', '"')
         content = content.replace(""", "'").replace(""", "'")
 
-        # Remove or replace special characters
+        # 移除或替换特殊字符
         content = content.replace("\n", " ").replace("\r", " ")
         content = content.replace("\t", " ")
 
-        # Remove control characters
+        # 移除控制字符
         content = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", content)
 
         return content.strip()
@@ -308,7 +308,7 @@ class QuotesAnalyzer:
         Returns:
             Quote 对象列表
         """
-        # Create a lookup map for sender info
+        # 创建发送者信息的查找映射
         sender_map = {}
         for msg in messages:
             sender_map[msg.sender_name] = {
@@ -317,14 +317,14 @@ class QuotesAnalyzer:
             }
 
         try:
-            # Try to extract JSON
+            # 尝试提取JSON
             json_match = re.search(r"\[.*?\]", result_text, re.DOTALL)
             if json_match:
                 json_text = json_match.group()
                 logger.info(f"找到 JSON 格式，长度: {len(json_text)} 字符")
                 logger.debug(f"金句提取 JSON 原文（前500字符）: {json_text[:500]}...")
 
-                # Fix and clean JSON
+                # 修复并清理JSON
                 json_text = self._fix_json(json_text)
                 logger.debug(f"修复后的 JSON（前300字符）: {json_text[:300]}...")
 
@@ -351,11 +351,11 @@ class QuotesAnalyzer:
                         )
                         continue
 
-                    # Get sender avatar from lookup map
+                    # 从查找映射中获取发送者头像
                     sender_info = sender_map.get(sender_name, {})
                     sender_avatar = sender_info.get("avatar", "")
 
-                    # Use timestamp from message if available, otherwise use from JSON
+                    # 如果消息中有时间戳则使用，否则使用JSON中的
                     if not timestamp and sender_name in sender_map:
                         timestamp = sender_info.get("timestamp", 0)
 
@@ -380,13 +380,13 @@ class QuotesAnalyzer:
                 logger.warning("响应中未找到 JSON 格式")
                 logger.info(f"完整响应内容: {result_text}")
         except json.JSONDecodeError as e:
-            logger.error(f"金句提取 JSON 解析失败: {e}")
+            logger.error(f"金句提取JSON解析失败: {e}")
             logger.error(
-                f"修复后的 JSON: {json_text if 'json_text' in locals() else 'N/A'}"
+                f"修复后的JSON: {json_text if 'json_text' in locals() else 'N/A'}"
             )
             logger.error(f"原始响应: {result_text}")
 
-            # Fallback: try regex extraction
+            # 降级方案：尝试正则表达式提取
             logger.info("尝试使用正则表达式提取金句...")
             quotes = self._extract_quotes_with_regex(
                 result_text, sender_map, max_quotes
@@ -410,32 +410,32 @@ class QuotesAnalyzer:
         Returns:
             修复后的 JSON 文本
         """
-        # Remove markdown code block markers
+        # 移除markdown代码块标记
         text = re.sub(r"```json\s*", "", text)
         text = re.sub(r"```\s*", "", text)
 
-        # Basic cleaning
+        # 基础清理
         text = text.replace("\n", " ").replace("\r", " ")
         text = re.sub(r"\s+", " ", text)
 
-        # Replace Chinese quotes with English quotes
+        # 将中文引号替换为英文引号
         text = text.replace('"', '"').replace('"', '"')
         text = text.replace(""", "'").replace(""", "'")
 
-        # Fix truncated JSON
+        # 修复截断的JSON
         if not text.endswith("]"):
             last_complete = text.rfind("}")
             if last_complete > 0:
                 text = text[: last_complete + 1] + "]"
 
-        # Fix common JSON format issues
-        # 1. Fix missing commas between objects
+        # 修复常见JSON格式问题
+        # 1. 修复对象之间缺少的逗号
         text = re.sub(r"}\s*{", "}, {", text)
 
-        # 2. Ensure field names have quotes
+        # 2. 确保字段名有引号
         text = re.sub(r"([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:", r'\1"\2":', text)
 
-        # 3. Remove extra commas
+        # 3. 移除多余的逗号
         text = re.sub(r",\s*}", "}", text)
         text = re.sub(r",\s*]", "]", text)
 
@@ -458,12 +458,12 @@ class QuotesAnalyzer:
         try:
             quotes = []
 
-            # Regex pattern to match quote objects
+            # 匹配金句对象的正则表达式模式
             quote_pattern = r'\{\s*"content":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"sender_name":\s*"([^"]+)"\s*,\s*"timestamp":\s*(\d+)\s*,\s*"reason":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
             matches = re.findall(quote_pattern, result_text, re.DOTALL)
 
             if not matches:
-                # Try more lenient matching
+                # 尝试更宽松的匹配
                 quote_pattern = r'"content":\s*"([^"]*(?:\\.[^"]*)*)"\s*[^}]*"sender_name":\s*"([^"]+)"[^}]*"reason":\s*"([^"]*(?:\\.[^"]*)*)"'
                 matches = re.findall(quote_pattern, result_text, re.DOTALL)
 
@@ -472,7 +472,7 @@ class QuotesAnalyzer:
                     sender_name = match[1].strip()
                     reason = match[2].strip()
 
-                    # Clean escaped characters
+                    # 清理转义字符
                     content = (
                         content.replace('\\"', '"')
                         .replace("\\n", " ")
@@ -484,7 +484,7 @@ class QuotesAnalyzer:
                         .replace("\\t", " ")
                     )
 
-                    # Get sender info
+                    # 获取发送者信息
                     sender_info = sender_map.get(sender_name, {})
                     sender_avatar = sender_info.get("avatar", "")
                     timestamp = sender_info.get("timestamp", 0)
@@ -505,7 +505,7 @@ class QuotesAnalyzer:
                     timestamp = int(match[2])
                     reason = match[3].strip()
 
-                    # Clean escaped characters
+                    # 清理转义字符
                     content = (
                         content.replace('\\"', '"')
                         .replace("\\n", " ")
@@ -517,7 +517,7 @@ class QuotesAnalyzer:
                         .replace("\\t", " ")
                     )
 
-                    # Get sender avatar
+                    # 获取发送者头像
                     sender_info = sender_map.get(sender_name, {})
                     sender_avatar = sender_info.get("avatar", "")
 
@@ -533,5 +533,5 @@ class QuotesAnalyzer:
 
             return quotes
         except Exception as e:
-            logger.error(f"Regex extraction failed: {e}")
+            logger.error(f"正则表达式提取失败: {e}")
             return []

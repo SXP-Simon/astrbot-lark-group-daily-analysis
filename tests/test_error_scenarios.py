@@ -1,7 +1,7 @@
 """
-Tests for error handling and fallback mechanisms.
+错误处理和回退机制测试
 
-Tests Requirements: 8.1, 8.2, 8.3, 8.5
+测试需求: 8.1, 8.2, 8.3, 8.5
 """
 
 import asyncio
@@ -25,11 +25,11 @@ from src.models import ParsedMessage
 
 
 class TestAPIFailures:
-    """Test handling of API failures"""
+    """测试API故障处理"""
     
     @pytest.mark.asyncio
     async def test_message_fetch_api_error(self):
-        """Test message fetcher handles API errors gracefully"""
+        """测试消息获取器优雅地处理API错误"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "lark"
@@ -51,7 +51,7 @@ class TestAPIFailures:
     
     @pytest.mark.asyncio
     async def test_user_info_fetch_error(self):
-        """Test user info cache handles fetch errors"""
+        """测试用户信息缓存处理获取错误"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "lark"
@@ -73,7 +73,7 @@ class TestAPIFailures:
     
     @pytest.mark.asyncio
     async def test_message_fetch_timeout(self):
-        """Test message fetcher handles timeouts"""
+        """测试消息获取器处理超时"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "lark"
@@ -94,7 +94,7 @@ class TestAPIFailures:
     
     @pytest.mark.asyncio
     async def test_api_rate_limit_error(self):
-        """Test handling of API rate limit errors"""
+        """测试API速率限制错误处理"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "lark"
@@ -115,11 +115,11 @@ class TestAPIFailures:
 
 
 class TestMalformedMessages:
-    """Test handling of malformed message data"""
+    """测试格式错误消息数据处理"""
     
     @pytest.mark.asyncio
     async def test_parse_message_invalid_json(self):
-        """Test parser handles invalid JSON in message content"""
+        """测试解析器处理消息内容中的无效JSON"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "lark"
@@ -151,7 +151,7 @@ class TestMalformedMessages:
     
     @pytest.mark.asyncio
     async def test_parse_message_missing_fields(self):
-        """Test parser handles messages with missing fields"""
+        """测试解析器处理缺少字段的消息"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "lark"
@@ -177,7 +177,7 @@ class TestMalformedMessages:
     
     @pytest.mark.asyncio
     async def test_parse_message_corrupted_timestamp(self):
-        """Test parser handles corrupted timestamps"""
+        """测试解析器处理损坏的时间戳"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "lark"
@@ -208,11 +208,11 @@ class TestMalformedMessages:
 
 
 class TestLLMFailures:
-    """Test handling of LLM analysis failures"""
+    """测试LLM分析失败处理"""
     
     @pytest.mark.asyncio
     async def test_topics_analyzer_llm_error(self, sample_parsed_messages):
-        """Test topics analyzer handles LLM errors"""
+        """测试话题分析器处理LLM错误"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -228,7 +228,7 @@ class TestLLMFailures:
     
     @pytest.mark.asyncio
     async def test_users_analyzer_llm_timeout(self, sample_parsed_messages):
-        """Test users analyzer handles LLM timeouts"""
+        """测试用户分析器处理LLM超时"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -243,7 +243,7 @@ class TestLLMFailures:
     
     @pytest.mark.asyncio
     async def test_quotes_analyzer_invalid_response(self, sample_parsed_messages):
-        """Test quotes analyzer handles invalid LLM responses"""
+        """测试金句分析器处理无效的LLM响应"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -259,7 +259,7 @@ class TestLLMFailures:
     
     @pytest.mark.asyncio
     async def test_analyzer_malformed_json_fallback(self, sample_parsed_messages):
-        """Test analyzers use regex fallback for malformed JSON"""
+        """测试分析器对格式错误JSON使用正则表达式回退"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -281,11 +281,11 @@ class TestLLMFailures:
 
 
 class TestFallbackMechanisms:
-    """Test fallback mechanisms"""
+    """测试回退机制"""
     
     @pytest.mark.asyncio
     async def test_user_info_fallback_name(self):
-        """Test fallback user name generation"""
+        """测试回退用户名生成"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "lark"
@@ -306,7 +306,7 @@ class TestFallbackMechanisms:
     
     @pytest.mark.asyncio
     async def test_empty_message_list_handling(self):
-        """Test handling of empty message lists"""
+        """测试空消息列表处理"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -321,7 +321,7 @@ class TestFallbackMechanisms:
         assert len(topics) == 0
     
     def test_missing_lark_adapter_error(self):
-        """Test clear error when Lark adapter is missing"""
+        """测试飞书适配器缺失时的明确错误"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "qq"  # Wrong platform
@@ -335,11 +335,11 @@ class TestFallbackMechanisms:
 
 
 class TestErrorLogging:
-    """Test error logging functionality"""
+    """测试错误日志功能"""
     
     @pytest.mark.asyncio
     async def test_api_error_logging(self):
-        """Test that API errors are logged with details"""
+        """测试API错误被详细记录"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "lark"
@@ -360,7 +360,7 @@ class TestErrorLogging:
     
     @pytest.mark.asyncio
     async def test_parse_error_logging(self):
-        """Test that parse errors are logged"""
+        """测试解析错误被记录"""
         mock_context = Mock()
         mock_adapter = Mock()
         mock_adapter.name = "lark"

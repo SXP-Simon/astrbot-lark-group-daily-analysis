@@ -200,7 +200,7 @@ class MessageFetcher:
 
         except Exception as e:
             logger.error(
-                f"Unexpected error fetching messages for chat_id={chat_id}, days={days}: {e}",
+                f"获取 chat_id={chat_id}, days={days} 的消息时发生意外错误: {e}",
                 exc_info=True,
             )
             return []

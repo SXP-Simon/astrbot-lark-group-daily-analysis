@@ -26,7 +26,7 @@ class MessageParser:
             user_info_cache: 用于获取用户信息的缓存
         """
         self._user_info_cache = user_info_cache
-        logger.debug("MessageParser initialized")
+        logger.debug("消息解析器已初始化")
 
     async def parse_message(self, msg) -> Optional[ParsedMessage]:
         """
@@ -42,7 +42,7 @@ class MessageParser:
         """
         message_id = "unknown"
         try:
-            # Extract message ID early for better error logging
+            # 提前提取消息ID以便更好地进行错误日志记录
             message_id = getattr(msg, "message_id", "unknown")
 
             # 验证消息对象
@@ -84,50 +84,50 @@ class MessageParser:
                 logger.debug(f"消息 {message_id} 是机器人消息，跳过")
                 return None
 
-            # Fetch sender info from cache
+            # 从缓存中获取发送者信息
             try:
                 user_info = await self._user_info_cache.get_user_info(sender_id)
             except Exception as e:
                 logger.error(
-                    f"Failed to fetch user info for sender {sender_id[:8]}... in message {message_id}: {e}. "
-                    f"Using fallback user info.",
+                    f"在消息 {message_id} 中获取发送者 {sender_id[:8]}... 的用户信息失败: {e}。 "
+                    f"使用降级用户信息。",
                     exc_info=True,
                 )
-                # Create fallback user info
+                # 创建降级用户信息
                 from ..models import UserInfo
 
                 user_info = UserInfo(
                     open_id=sender_id,
-                    name=f"User_{sender_id[:8]}",
+                    name=f"用户_{sender_id[:8]}",
                     avatar_url="",
                     en_name="",
                 )
 
-            # Extract message type
+            # 提取消息类型
             message_type = msg.msg_type if hasattr(msg, "msg_type") else "unknown"
 
-            # Extract timestamp (convert from milliseconds to seconds if needed)
+            # 提取时间戳（如需要，将毫秒转换为秒）
             try:
                 timestamp = int(msg.create_time) if hasattr(msg, "create_time") else 0
-                # Lark timestamps are in milliseconds, convert to seconds
-                if timestamp > 10**12:  # If timestamp is in milliseconds
+                # 飞书时间戳为毫秒格式，需要转换为秒
+                if timestamp > 10**12:  # 如果时间戳是毫秒格式
                     timestamp = timestamp // 1000
                 elif timestamp == 0:
                     logger.warning(
-                        f"Message {message_id} has no timestamp, using current time"
+                        f"消息 {message_id} 没有时间戳，使用当前时间"
                     )
                     from datetime import datetime
 
                     timestamp = int(datetime.now().timestamp())
             except (ValueError, TypeError) as e:
                 logger.warning(
-                    f"Failed to parse timestamp for message {message_id}: {e}. Using current time."
+                    f"解析消息 {message_id} 的时间戳失败: {e}。使用当前时间。"
                 )
                 from datetime import datetime
 
                 timestamp = int(datetime.now().timestamp())
 
-            # Get raw content
+            # 获取原始内容
             try:
                 raw_content = (
                     msg.body.content
@@ -135,10 +135,10 @@ class MessageParser:
                     else ""
                 )
             except AttributeError as e:
-                logger.warning(f"Message {message_id} has invalid body structure: {e}")
+                logger.warning(f"消息 {message_id} 的body结构无效: {e}")
                 raw_content = ""
 
-            # Parse content based on message type
+            # 根据消息类型解析内容
             content = None
             try:
                 if message_type == "text":
@@ -149,25 +149,25 @@ class MessageParser:
                     content = self.parse_system_message(msg)
                 else:
                     logger.warning(
-                        f"Unsupported message type '{message_type}' for message {message_id}. "
-                        f"Supported types: text, post, system, share_chat"
+                        f"消息 {message_id} 的消息类型 '{message_type}' 不受支持。 "
+                        f"支持的类型: text, post, system, share_chat"
                     )
                     return None
             except Exception as e:
                 logger.error(
-                    f"Error parsing content for message {message_id} (type: {message_type}): {e}",
+                    f"解析消息 {message_id} 的内容时出错 (类型: {message_type}): {e}",
                     exc_info=True,
                 )
                 return None
 
-            # If content parsing failed, skip this message
+            # 如果内容解析失败，跳过此消息
             if content is None or content.strip() == "":
                 logger.warning(
-                    f"Failed to parse content or content is empty for message {message_id} (type: {message_type})"
+                    f"解析消息 {message_id} 的内容失败或内容为空 (类型: {message_type})"
                 )
                 return None
 
-            # Create ParsedMessage
+            # 创建ParsedMessage
             try:
                 parsed_message = ParsedMessage(
                     message_id=message_id,
@@ -181,13 +181,13 @@ class MessageParser:
                 )
             except Exception as e:
                 logger.error(
-                    f"Failed to create ParsedMessage object for message {message_id}: {e}",
+                    f"为消息 {message_id} 创建ParsedMessage对象失败: {e}",
                     exc_info=True,
                 )
                 return None
 
             logger.debug(
-                f"Parsed message {message_id[:8]}... from {user_info.name} (avatar: {bool(user_info.avatar_url)}): "
+                f"解析了来自 {user_info.name} 的消息 {message_id[:8]}... (头像: {bool(user_info.avatar_url)}): "
                 f"{content[:50]}..."
                 if len(content) > 50
                 else content
@@ -197,141 +197,141 @@ class MessageParser:
 
         except Exception as e:
             logger.error(
-                f"Unexpected error parsing message {message_id}: {e}", exc_info=True
+                f"解析消息 {message_id} 时发生意外错误: {e}", exc_info=True
             )
             return None
 
     def parse_text_content(self, content: str) -> Optional[str]:
         """
-        Parse text message content.
+        解析文本消息内容。
 
-        Text messages in Lark have their content stored as JSON in the format:
-        {"text": "actual message text"}
+        飞书中的文本消息内容以JSON格式存储：
+        {"text": "实际消息文本"}
 
-        Args:
-            content: Raw content string from message body
+        参数:
+            content: 消息body中的原始内容字符串
 
-        Returns:
-            Extracted text or None if parsing fails
+        返回:
+            提取的文本，解析失败时返回None
         """
         try:
             if not content:
-                logger.debug("Empty content provided to parse_text_content")
+                logger.debug("提供给parse_text_content的内容为空")
                 return None
 
-            # Content is JSON-encoded
+            # 内容为JSON编码
             try:
                 content_json = json.loads(content)
             except json.JSONDecodeError as e:
                 logger.warning(
-                    f"Failed to parse text content as JSON: {e}. "
-                    f"Attempting to use raw content as fallback."
+                    f"将文本内容解析为JSON失败: {e}。 "
+                    f"尝试使用原始内容作为后备方案。"
                 )
-                # Try to return raw content as fallback
+                # 尝试返回原始内容作为后备方案
                 return content if content.strip() else None
 
-            # Extract text field
+            # 提取文本字段
             if not isinstance(content_json, dict):
                 logger.warning(
-                    f"Text content JSON is not a dictionary: {type(content_json)}"
+                    f"文本内容JSON不是字典: {type(content_json)}"
                 )
                 return str(content_json) if content_json else None
 
             text = content_json.get("text", "")
 
             if not text:
-                logger.debug("Text field is empty in content JSON")
+                logger.debug("内容JSON中的文本字段为空")
                 return None
 
             return text
 
         except Exception as e:
-            logger.error(f"Unexpected error parsing text content: {e}", exc_info=True)
-            # Last resort: return raw content if it's not empty
+            logger.error(f"解析文本内容时发生意外错误: {e}", exc_info=True)
+            # 最后手段：如果原始内容不为空则返回原始内容
             return content if content and content.strip() else None
 
     def parse_post_content(self, content: str) -> Optional[str]:
         """
-        Parse post (rich text) message content.
+        解析富文本消息内容。
 
-        Post messages in Lark have a structured format with title and content blocks:
+        飞书中的富文本消息具有标题和内容块的结构化格式：
         {
             "zh_cn": {
-                "title": "Post Title",
+                "title": "帖子标题",
                 "content": [
-                    [{"tag": "text", "text": "Line 1"}],
-                    [{"tag": "text", "text": "Line 2"}, {"tag": "a", "text": "link"}]
+                    [{"tag": "text", "text": "第1行"}],
+                    [{"tag": "text", "text": "第2行"}, {"tag": "a", "text": "链接"}]
                 ]
             }
         }
 
-        This method extracts all text elements and concatenates them.
+        此方法提取所有文本元素并将它们连接起来。
 
-        Args:
-            content: Raw content string from message body
+        参数:
+            content: 消息body中的原始内容字符串
 
-        Returns:
-            Concatenated text from post or None if parsing fails
+        返回:
+            来自帖子的连接文本，解析失败时返回None
         """
         try:
             if not content:
-                logger.debug("Empty content provided to parse_post_content")
+                logger.debug("提供给parse_post_content的内容为空")
                 return None
 
-            # Content is JSON-encoded
+            # 内容为JSON编码
             try:
                 content_json = json.loads(content)
             except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse post content as JSON: {e}")
+                logger.warning(f"将富文本内容解析为JSON失败: {e}")
                 return None
 
             if not isinstance(content_json, dict):
                 logger.warning(
-                    f"Post content JSON is not a dictionary: {type(content_json)}"
+                    f"富文本内容JSON不是字典: {type(content_json)}"
                 )
                 return None
 
-            # Post messages can have multiple language versions
-            # Try to get the first available language version
+            # 富文本消息可以有多种语言版本
+            # 尝试获取第一个可用的语言版本
             post_data = None
             for lang_key in ["zh_cn", "zh_tw", "en_us", "ja_jp"]:
                 if lang_key in content_json:
                     post_data = content_json[lang_key]
-                    logger.debug(f"Found post data in language: {lang_key}")
+                    logger.debug(f"在语言 {lang_key} 中找到富文本数据")
                     break
 
-            # If no known language key, try to get the first key
+            # 如果没有已知的语言键，尝试获取第一个键
             if not post_data and content_json:
                 try:
                     first_key = next(iter(content_json))
                     post_data = content_json[first_key]
-                    logger.debug(f"Using first available language key: {first_key}")
+                    logger.debug(f"使用第一个可用的语言键: {first_key}")
                 except StopIteration:
-                    logger.warning("Content JSON is empty")
+                    logger.warning("内容JSON为空")
                     return None
 
             if not post_data:
                 logger.warning(
-                    f"No post data found in content. Available keys: {list(content_json.keys()) if content_json else 'None'}"
+                    f"内容中未找到富文本数据。可用键: {list(content_json.keys()) if content_json else 'None'}"
                 )
-                logger.debug(f"Content JSON structure: {content_json}")
+                logger.debug(f"内容JSON结构: {content_json}")
                 return None
 
             if not isinstance(post_data, dict):
-                logger.warning(f"Post data is not a dictionary: {type(post_data)}")
+                logger.warning(f"富文本数据不是字典: {type(post_data)}")
                 return None
 
-            # Extract title
+            # 提取标题
             title = post_data.get("title", "")
 
-            # Extract content blocks
+            # 提取内容块
             content_blocks = post_data.get("content", [])
 
             if not isinstance(content_blocks, list):
-                logger.warning(f"Content blocks is not a list: {type(content_blocks)}")
+                logger.warning(f"内容块不是列表: {type(content_blocks)}")
                 content_blocks = []
 
-            # Collect all text elements
+            # 收集所有文本元素
             text_parts = []
 
             if title:
@@ -340,22 +340,22 @@ class MessageParser:
             for block_idx, block in enumerate(content_blocks):
                 try:
                     if not isinstance(block, list):
-                        logger.debug(f"Block {block_idx} is not a list, skipping")
+                        logger.debug(f"块 {block_idx} 不是列表，跳过")
                         continue
 
-                    # Each block is a list of elements (a line)
+                    # 每个块是一个元素列表（一行）
                     line_parts = []
                     for element_idx, element in enumerate(block):
                         try:
                             if isinstance(element, dict):
-                                # Extract text from various element types
+                                # 从各种元素类型中提取文本
                                 if "text" in element:
                                     line_parts.append(str(element["text"]))
                                 elif "content" in element:
                                     line_parts.append(str(element["content"]))
                         except Exception as e:
                             logger.debug(
-                                f"Error processing element {element_idx} in block {block_idx}: {e}"
+                                f"处理块 {block_idx} 中的元素 {element_idx} 时出错: {e}"
                             )
                             continue
 
@@ -363,97 +363,96 @@ class MessageParser:
                         text_parts.append(" ".join(line_parts))
 
                 except Exception as e:
-                    logger.debug(f"Error processing block {block_idx}: {e}")
+                    logger.debug(f"处理块 {block_idx} 时出错: {e}")
                     continue
 
-            # Join all parts with newlines
+            # 用换行符连接所有部分
             result = "\n".join(text_parts)
             return result if result.strip() else None
 
         except Exception as e:
-            logger.error(f"Unexpected error parsing post content: {e}", exc_info=True)
+            logger.error(f"解析富文本内容时发生意外错误: {e}", exc_info=True)
             return None
 
     def parse_system_message(self, msg) -> Optional[str]:
         """
-        Parse system message content.
+        解析系统消息内容。
 
-        System messages in Lark use templates with variables, for example:
-        - "{from_user} invited {to_chatters}"
-        - "{from_user} removed {to_chatters}"
-        - "{from_user} changed group name to {new_name}"
+        飞书中的系统消息使用带有变量的模板，例如：
+        - "{from_user} 邀请了 {to_chatters}"
+        - "{from_user} 移除了 {to_chatters}"
+        - "{from_user} 将群名称改为 {new_name}"
 
-        This method extracts the template and replaces variables with actual values
-        to generate a human-readable message.
+        此方法提取模板并用实际值替换变量，
+        生成人类可读的消息。
 
-        Args:
-            msg: Lark SDK message object
+        参数:
+            msg: 飞书SDK消息对象
 
-        Returns:
-            Human-readable system message text or None if parsing fails
+        返回:
+            人类可读的系统消息文本，解析失败时返回None
         """
         try:
-            # System messages may have different structures
-            # Try to get the content from body
+            # 系统消息可能有不同的结构
+            # 尝试从body获取内容
             if not msg.body or not hasattr(msg.body, "content"):
-                logger.warning(f"System message {msg.message_id} has no body content")
+                logger.warning(f"系统消息 {msg.message_id} 没有body内容")
                 return None
 
             raw_content = msg.body.content
 
-            # Try to parse as JSON
+            # 尝试解析为JSON
             try:
                 content_json = json.loads(raw_content)
 
-                # Look for template field
+                # 查找模板字段
                 template = content_json.get("template", "")
 
                 if not template:
-                    # Some system messages might have a "text" field
+                    # 一些系统消息可能有"text"字段
                     text = content_json.get("text", "")
                     if text:
                         return text
 
-                    # If no template or text, return a generic message
+                    # 如果没有模板或文本，返回通用消息
                     logger.warning(
-                        f"System message {msg.message_id} has no template or text"
+                        f"系统消息 {msg.message_id} 没有模板或文本"
                     )
-                    return "[System Message]"
+                    return "[系统消息]"
 
-                # Extract variables from the message
-                # Variables are typically in the format {variable_name}
-                # We'll try to replace them with actual values if available
+                # 从消息中提取变量
+                # 变量通常格式为 {variable_name}
+                # 我们将尝试用实际值替换它们（如果可用）
 
-                # Common variables in system messages
+                # 系统消息中的常见变量
                 variables = content_json.get("variables", {})
 
-                # Replace variables in template
+                # 在模板中替换变量
                 result = template
                 for var_name, var_value in variables.items():
                     placeholder = f"{{{var_name}}}"
                     result = result.replace(placeholder, str(var_value))
 
-                # If there are still unreplaced variables, try to extract user names
-                # from the message context
+                # 如果还有未替换的变量，尝试从消息上下文中提取用户名
                 if "{from_user}" in result or "{to_chatters}" in result:
-                    # Try to get sender name
+                    # 尝试获取发送者名称
                     if msg.sender and msg.sender.id:
                         sender_id = msg.sender.id.open_id
-                        # We can't await here, so we'll use a placeholder
-                        result = result.replace("{from_user}", f"User_{sender_id[:8]}")
+                        # 这里不能await，所以我们使用占位符
+                        result = result.replace("{from_user}", f"用户{sender_id[:8]}")
 
-                    # For to_chatters, we'll use a generic placeholder
-                    result = result.replace("{to_chatters}", "some users")
+                    # 对于to_chatters，我们使用通用占位符
+                    result = result.replace("{to_chatters}", "一些用户")
 
                 return result
 
             except json.JSONDecodeError:
-                # If not JSON, return the raw content
-                logger.warning(f"System message {msg.message_id} content is not JSON")
-                return raw_content if raw_content else "[System Message]"
+                # 如果不是JSON，返回原始内容
+                logger.warning(f"系统消息 {msg.message_id} 内容不是JSON")
+                return raw_content if raw_content else "[系统消息]"
 
         except Exception as e:
             logger.error(
-                f"Error parsing system message {getattr(msg, 'message_id', 'unknown')}: {e}"
+                f"解析系统消息 {getattr(msg, 'message_id', 'unknown')} 时出错: {e}"
             )
             return None

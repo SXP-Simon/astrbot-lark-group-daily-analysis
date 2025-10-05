@@ -15,7 +15,7 @@ class ParsedMessage:
     """
     解析飞书 SDK 消息对象后的统一消息格式
 
-    Attributes:
+    属性:
         message_id: 唯一消息标识符
         timestamp: Unix 时间戳（秒）
         sender_id: 发送者的 open_id
@@ -41,7 +41,7 @@ class UserInfo:
     """
     从飞书 API 获取的用户信息
 
-    Attributes:
+    属性:
         open_id: 用户的唯一 open_id
         name: 显示名称
         avatar_url: 头像图片 URL
@@ -59,7 +59,7 @@ class Topic:
     """
     从消息中提取的讨论话题
 
-    Attributes:
+    属性:
         title: 话题标题
         participants: 参与者名称列表
         description: 话题的详细描述
@@ -77,7 +77,7 @@ class UserMetrics:
     """
     用户活动指标
 
-    Attributes:
+    属性:
         message_count: 消息总数
         char_count: 字符总数
         avg_message_length: 平均消息长度
@@ -103,7 +103,7 @@ class UserTitle:
     """
     LLM 分析分配的用户活动称号
 
-    Attributes:
+    属性:
         open_id: 用户的 open_id
         name: 用户显示名称
         avatar_url: 用户头像 URL
@@ -127,7 +127,7 @@ class Quote:
     """
     从消息中提取的金句
 
-    Attributes:
+    属性:
         content: 金句内容
         sender_name: 发言人姓名
         sender_avatar: 发送者头像 URL
@@ -147,7 +147,7 @@ class EmojiStats:
     """
     表情使用统计
 
-    Attributes:
+    属性:
         total_count: 使用的表情总数
         unique_count: 唯一表情数量
         top_emojis: 表情到数量的字典
@@ -165,7 +165,7 @@ class Statistics:
     """
     群组统计数据
 
-    Attributes:
+    属性:
         message_count: 消息总数
         char_count: 字符总数
         participant_count: 唯一参与者数量
@@ -187,7 +187,7 @@ class TokenUsage:
     """
     LLM token 使用量跟踪
 
-    Attributes:
+    属性:
         prompt_tokens: 提示词中的 token 数量
         completion_tokens: 完成内容中的 token 数量
         total_tokens: 使用的总 token 数量
@@ -211,7 +211,7 @@ class AnalysisResult:
     """
     完整的分析结果
 
-    Attributes:
+    属性:
         topics: 讨论话题列表
         user_titles: 用户称号列表
         quotes: 金句列表

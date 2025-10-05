@@ -1,5 +1,5 @@
 """
-Pytest configuration and fixtures for testing.
+Pytest 配置和测试固件
 """
 
 import pytest
@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 @pytest.fixture
 def mock_lark_context():
-    """Create a mock AstrBot context with Lark adapter"""
+    """创建带有飞书适配器的模拟 AstrBot 上下文"""
     from unittest.mock import Mock
     
     mock_context = Mock()
@@ -28,7 +28,7 @@ def mock_lark_context():
 
 @pytest.fixture
 def sample_user_info():
-    """Create sample user info for testing"""
+    """创建测试用的示例用户信息"""
     from src.models import UserInfo
     
     return UserInfo(
@@ -41,7 +41,7 @@ def sample_user_info():
 
 @pytest.fixture
 def sample_parsed_messages():
-    """Create sample parsed messages for testing"""
+    """创建测试用的示例解析消息"""
     from src.models import ParsedMessage
     from datetime import datetime
     

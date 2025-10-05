@@ -135,10 +135,10 @@ class UsersAnalyzer:
                     data["reply_count"] += 1
 
             except AttributeError as e:
-                logger.warning(f"Invalid message object in metrics calculation: {e}")
+                logger.warning(f"指标计算中的消息对象无效: {e}")
                 continue
             except Exception as e:
-                logger.error(f"Error processing message in metrics calculation: {e}")
+                logger.error(f"处理指标计算中的消息时出错: {e}")
                 continue
 
         # 转换为UserMetrics对象
@@ -206,12 +206,12 @@ class UsersAnalyzer:
         Returns:
             元组：(UserTitle对象列表, TokenUsage)
         """
-        # Prepare user summaries with actual names
+        # 准备包含实际用户名的用户摘要
         user_summaries = []
-        user_info_map = {}  # Map user_id to (name, avatar)
+        user_info_map = {}  # 将user_id映射到(name, avatar)
 
         for user_id, metrics in sorted_users:
-            # Calculate activity ratios
+            # 计算活动比例
             night_messages = sum(
                 metrics.hourly_distribution.get(h, 0) for h in range(0, 6)
             )
@@ -231,12 +231,12 @@ class UsersAnalyzer:
                 else 0
             )
 
-            # Store user info for later
+            # 存储用户信息供后续使用
             user_info_map[user_id] = (metrics.sender_name, metrics.sender_avatar)
 
-            # Debug: log user info mapping
+            # 调试：记录用户信息映射
             logger.debug(
-                f"Added to user_info_map: {user_id[:12]}... -> name={metrics.sender_name}, has_avatar={bool(metrics.sender_avatar)}"
+                f"添加到user_info_map: {user_id[:12]}... -> name={metrics.sender_name}, has_avatar={bool(metrics.sender_avatar)}"
             )
 
             user_summaries.append(
@@ -251,7 +251,7 @@ class UsersAnalyzer:
                 }
             )
 
-        # Build LLM prompt with user_id included
+        # 构建包含user_id的LLM提示词
         users_text = "\n".join(
             [
                 f"- {user['name']} (ID: {user['user_id']}): "
@@ -315,14 +315,14 @@ class UsersAnalyzer:
 
         # 解析响应
         result_text = self.llm_helper.extract_response_text(response)
-        logger.debug(f"User title analysis raw response: {result_text[:500]}...")
+        logger.debug(f"用户称号分析原始响应: {result_text[:500]}...")
 
-        # Try to parse JSON
+        # 尝试解析JSON
         try:
             json_match = re.search(r"\[.*?\]", result_text, re.DOTALL)
             if json_match:
                 json_text = json_match.group()
-                logger.debug(f"User title analysis JSON: {json_text[:300]}...")
+                logger.debug(f"用户称号分析JSON: {json_text[:300]}...")
 
                 titles_data = json.loads(json_text)
                 user_titles = []
@@ -333,16 +333,16 @@ class UsersAnalyzer:
                         user_id, (title_data.get("name", ""), "")
                     )
 
-                    # Debug: log user info mapping
+                    # 调试：记录用户信息映射
                     logger.debug(
-                        f"User {user_id[:12]}... -> name={name}, has_avatar={bool(avatar)}"
+                        f"用户 {user_id[:12]}... -> 名称={name}, 有头像={bool(avatar)}"
                     )
                     if user_id not in user_info_map:
                         logger.warning(
-                            f"User {user_id[:12]}... not found in user_info_map. Available users: {list(user_info_map.keys())[:3]}"
+                            f"用户 {user_id[:12]}... 未在 user_info_map 中找到。可用用户: {list(user_info_map.keys())[:3]}"
                         )
 
-                    # Get metrics for this user
+                    # 获取此用户的指标
                     metrics = None
                     for uid, m in sorted_users:
                         if uid == user_id:
@@ -372,12 +372,12 @@ class UsersAnalyzer:
                     )
 
                 logger.info(
-                    f"User title analysis successful, parsed {len(user_titles)} titles"
+                    f"用户称号分析成功，解析了 {len(user_titles)} 个称号"
                 )
                 return user_titles, token_usage
 
         except json.JSONDecodeError as e:
-            logger.error(f"User title analysis JSON parsing failed: {e}")
-            logger.debug(f"Original response: {result_text}")
+            logger.error(f"用户称号分析JSON解析失败: {e}")
+            logger.debug(f"原始响应: {result_text}")
 
         return [], token_usage

@@ -499,9 +499,9 @@ class LarkGroupDailyAnalysis(Star):
                     topics, topics_token_usage = await topics_analyzer.analyze(
                         parsed_messages, umo
                     )
-                    logger.info(f"Topics analysis complete: {len(topics)} topics found")
+                    logger.info(f"话题分析完成: 找到 {len(topics)} 个话题")
                 except Exception as e:
-                    logger.error(f"Topics analysis failed: {e}", exc_info=True)
+                    logger.error(f"话题分析失败: {e}", exc_info=True)
 
             # 分析用户
             user_titles = []

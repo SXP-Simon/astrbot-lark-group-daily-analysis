@@ -1,7 +1,7 @@
 """
-Integration tests for Lark platform components.
+飞书平台组件集成测试
 
-Tests Requirements: 1.1, 2.2, 3.1
+测试需求: 1.1, 2.2, 3.1
 """
 
 import asyncio
@@ -24,10 +24,10 @@ from src.models import ParsedMessage, UserInfo
 
 
 class TestLarkClientManager:
-    """Test LarkClientManager functionality"""
+    """测试飞书客户端管理器功能"""
     
     def test_init_with_valid_adapter(self):
-        """Test initialization with valid Lark adapter"""
+        """测试使用有效的飞书适配器进行初始化"""
         # Import the actual adapter class for isinstance check
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
@@ -49,7 +49,7 @@ class TestLarkClientManager:
         assert manager._lark_adapter == mock_adapter
     
     def test_init_without_lark_adapter(self):
-        """Test initialization fails without Lark adapter"""
+        """测试没有飞书适配器时初始化失败"""
         mock_context = Mock()
         mock_platform_manager = Mock()
         mock_context.platform_manager = mock_platform_manager
@@ -61,7 +61,7 @@ class TestLarkClientManager:
             LarkClientManager(mock_context)
     
     def test_get_client(self):
-        """Test getting Lark SDK client"""
+        """测试获取飞书SDK客户端"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -80,7 +80,7 @@ class TestLarkClientManager:
         assert client == mock_client
     
     def test_get_bot_open_id(self):
-        """Test getting bot's open_id"""
+        """测试获取机器人的open_id"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -99,11 +99,11 @@ class TestLarkClientManager:
 
 
 class TestUserInfoCache:
-    """Test UserInfoCache functionality"""
+    """测试用户信息缓存功能"""
     
     @pytest.mark.asyncio
     async def test_get_user_info_cache_miss(self):
-        """Test fetching user info when not in cache"""
+        """测试缓存未命中时获取用户信息"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -138,7 +138,7 @@ class TestUserInfoCache:
     
     @pytest.mark.asyncio
     async def test_get_user_info_cache_hit(self):
-        """Test fetching user info from cache"""
+        """测试从缓存中获取用户信息"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -171,7 +171,7 @@ class TestUserInfoCache:
     
     @pytest.mark.asyncio
     async def test_get_user_info_fallback_on_error(self):
-        """Test fallback when API fails"""
+        """测试API失败时的回退"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -196,7 +196,7 @@ class TestUserInfoCache:
             assert "User_ou_test" in user_info.name
     
     def test_clear_cache(self):
-        """Test cache clearing"""
+        """测试缓存清理"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -221,11 +221,11 @@ class TestUserInfoCache:
 
 
 class TestMessageFetcher:
-    """Test MessageFetcher functionality"""
+    """测试消息获取器功能"""
     
     @pytest.mark.asyncio
     async def test_fetch_messages_basic(self):
-        """Test basic message fetching"""
+        """测试基本消息获取"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -258,7 +258,7 @@ class TestMessageFetcher:
     
     @pytest.mark.asyncio
     async def test_fetch_messages_filters_bot(self):
-        """Test that bot's own messages are filtered out"""
+        """测试过滤掉机器人自己的消息"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -301,7 +301,7 @@ class TestMessageFetcher:
     
     @pytest.mark.asyncio
     async def test_fetch_messages_pagination(self):
-        """Test message fetching with pagination"""
+        """测试分页消息获取"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -343,11 +343,11 @@ class TestMessageFetcher:
 
 
 class TestMessageParser:
-    """Test MessageParser functionality"""
+    """测试消息解析器功能"""
     
     @pytest.mark.asyncio
     async def test_parse_text_message(self):
-        """Test parsing text message"""
+        """测试解析文本消息"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -393,7 +393,7 @@ class TestMessageParser:
     
     @pytest.mark.asyncio
     async def test_parse_post_message(self):
-        """Test parsing post (rich text) message"""
+        """测试解析富文本消息"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -448,7 +448,7 @@ class TestMessageParser:
     
     @pytest.mark.asyncio
     async def test_parse_system_message(self):
-        """Test parsing system message"""
+        """测试解析系统消息"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()
@@ -497,7 +497,7 @@ class TestMessageParser:
     
     @pytest.mark.asyncio
     async def test_parse_unsupported_message(self):
-        """Test handling unsupported message types"""
+        """测试处理不支持的消息类型"""
         from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
         
         mock_context = Mock()

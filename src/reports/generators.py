@@ -171,7 +171,7 @@ class ReportGenerator:
             try:
                 max_topics = self.config_manager.get_max_topics()
             except Exception as e:
-                logger.warning(f"Error getting max_topics config: {e}")
+                logger.warning(f"获取最大话题数配置出错: {e}")
                 max_topics = 5
 
             if topics:
@@ -191,7 +191,7 @@ class ReportGenerator:
                         report += f"   参与者: {contributors_str}\n"
                         report += f"   {description}\n\n"
                     except AttributeError as e:
-                        logger.warning(f"Error formatting topic {i}: {e}")
+                        logger.warning(f"格式化话题 {i} 时出错: {e}")
                         continue
             else:
                 report += "暂无热门话题数据\n\n"
@@ -201,7 +201,7 @@ class ReportGenerator:
             try:
                 max_user_titles = self.config_manager.get_max_user_titles()
             except Exception as e:
-                logger.warning(f"Error getting max_user_titles config: {e}")
+                logger.warning(f"获取最大用户称号数配置出错: {e}")
                 max_user_titles = 10
 
             if user_titles:
@@ -215,7 +215,7 @@ class ReportGenerator:
                         report += f"• {name} - {title_text} ({mbti})\n"
                         report += f"  {reason}\n\n"
                     except AttributeError as e:
-                        logger.warning(f"Error formatting user title: {e}")
+                        logger.warning(f"格式化用户称号时出错: {e}")
                         continue
             else:
                 report += "暂无群友称号数据\n\n"
@@ -225,7 +225,7 @@ class ReportGenerator:
             try:
                 max_golden_quotes = self.config_manager.get_max_golden_quotes()
             except Exception as e:
-                logger.warning(f"Error getting max_golden_quotes config: {e}")
+                logger.warning(f"获取最大金句数配置出错: {e}")
                 max_golden_quotes = 5
 
             if quotes:
@@ -238,7 +238,7 @@ class ReportGenerator:
                         report += f'{i}. "{content}" —— {sender_name}\n'
                         report += f"   {reason}\n\n"
                     except AttributeError as e:
-                        logger.warning(f"Error formatting quote {i}: {e}")
+                        logger.warning(f"格式化金句 {i} 时出错: {e}")
                         continue
             else:
                 report += "暂无群圣经数据\n\n"
@@ -319,7 +319,7 @@ class ReportGenerator:
             max_user_titles = self.config_manager.get_max_user_titles()
             if user_titles:
                 for title in user_titles[:max_user_titles]:
-                    # Debug: log avatar URL
+                    # 调试：记录头像URL
                     logger.debug(
                         f"Generating report for user {title.name}: avatar_url={title.avatar_url[:80] if title.avatar_url else 'None'}..."
                     )
@@ -582,13 +582,13 @@ class ReportGenerator:
     async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
         """将 HTML 内容转换为 PDF 文件"""
         try:
-            # Validate inputs
+            # 验证输入
             if not html_content:
-                logger.error("Cannot convert to PDF: html_content is empty")
+                logger.error("无法转换为PDF: html_content 为空")
                 return False
 
             if not output_path:
-                logger.error("Cannot convert to PDF: output_path is empty")
+                logger.error("无法转换为PDF: output_path 为空")
                 return False
 
             # 确保 pyppeteer 可用
@@ -605,7 +605,7 @@ class ReportGenerator:
                 import os
             except ImportError as e:
                 logger.error(
-                    f"Failed to import pyppeteer: {e}. Please install it: pip install pyppeteer"
+                    f"导入 pyppeteer 失败: {e}。请安装: pip install pyppeteer"
                 )
                 return False
 
@@ -643,12 +643,12 @@ class ReportGenerator:
                         logger.info(f"使用系统 Chrome: {chrome_path}")
                         break
 
-            # Launch browser
+            # 启动浏览器
             try:
                 browser = await launch(**launch_options)
             except Exception as e:
                 logger.error(
-                    f"Failed to launch browser: {e}. Please check if Chrome/Chromium is installed.",
+                    f"启动浏览器失败: {e}。请检查是否已安装 Chrome/Chromium。",
                     exc_info=True,
                 )
                 return False
@@ -660,7 +660,7 @@ class ReportGenerator:
                 try:
                     await page.setContent(html_content)
                 except Exception as e:
-                    logger.error(f"Failed to set page content: {e}", exc_info=True)
+                    logger.error(f"设置页面内容失败: {e}", exc_info=True)
                     await browser.close()
                     return False
 
@@ -669,7 +669,7 @@ class ReportGenerator:
                     await page.waitForSelector("body", {"timeout": 10000})
                 except Exception as e:
                     # 如果等待失败，继续执行（可能页面已经加载完成）
-                    logger.debug(f"Wait for selector timed out (may be OK): {e}")
+                    logger.debug(f"等待选择器超时（可能正常）: {e}")
 
                 # 导出 PDF
                 try:
@@ -688,7 +688,7 @@ class ReportGenerator:
                         }
                     )
                 except Exception as e:
-                    logger.error(f"Failed to generate PDF: {e}", exc_info=True)
+                    logger.error(f"生成PDF失败: {e}", exc_info=True)
                     await browser.close()
                     return False
 
@@ -697,7 +697,7 @@ class ReportGenerator:
                 return True
 
             except Exception as e:
-                logger.error(f"Error during PDF generation: {e}", exc_info=True)
+                logger.error(f"PDF 生成过程中出错: {e}", exc_info=True)
                 try:
                     await browser.close()
                 except Exception:

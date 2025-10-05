@@ -49,39 +49,39 @@ class UserInfoCache:
 
     async def get_user_info(self, open_id: str) -> UserInfo:
         """
-        Get user information, using cache if available.
+        获取用户信息，如果缓存可用则使用缓存。
 
-        This method first checks the cache for valid (non-expired) user info.
-        If not found or expired, it fetches from the Lark API and updates the cache.
+        此方法首先检查缓存中是否有有效的（未过期的）用户信息。
+        如果未找到或已过期，则从飞书API获取并更新缓存。
 
-        Args:
-            open_id: User's open_id
+        参数:
+            open_id: 用户的open_id
 
-        Returns:
-            UserInfo object with user details (never None, uses fallback if needed)
+        返回:
+            包含用户详情的UserInfo对象（永远不会为None，需要时使用降级数据）
         """
         try:
-            # Validate input
+            # 验证输入
             if not open_id:
                 logger.warning(
-                    "Empty open_id provided to get_user_info, using fallback"
+                    "提供给get_user_info的open_id为空，使用降级方案"
                 )
                 return self._create_fallback_user_info("unknown")
 
-            # Check if user has a custom name mapping in config
+            # 检查用户是否在配置中有自定义名称映射
             if open_id in self._user_name_mapping:
                 custom_name = self._user_name_mapping[open_id]
                 logger.debug(
-                    f"Using custom name mapping for {open_id[:12]}...: {custom_name}"
+                    f"为 {open_id[:12]}... 使用自定义名称映射: {custom_name}"
                 )
                 user_info = UserInfo(
                     open_id=open_id, name=custom_name, avatar_url="", en_name=""
                 )
-                # Cache the custom mapping
+                # 缓存自定义映射
                 self._cache[open_id] = (user_info, time.time())
                 return user_info
 
-            # Check cache first
+            # 首先检查缓存
             if open_id in self._cache:
                 try:
                     user_info, timestamp = self._cache[open_id]
@@ -89,44 +89,44 @@ class UserInfoCache:
 
                     if age < self._ttl:
                         logger.debug(
-                            f"Cache hit for user {open_id[:8]}... (age: {age:.1f}s)"
+                            f"用户 {open_id[:8]}... 缓存命中 (年龄: {age:.1f}秒)"
                         )
                         return user_info
                     else:
                         logger.debug(
-                            f"Cache expired for user {open_id[:8]}... (age: {age:.1f}s)"
+                            f"用户 {open_id[:8]}... 缓存过期 (年龄: {age:.1f}秒)"
                         )
                 except Exception as e:
                     logger.warning(
-                        f"Error reading cache for user {open_id[:8]}...: {e}"
+                        f"读取用户 {open_id[:8]}... 缓存时出错: {e}"
                     )
-                    # Remove corrupted cache entry
+                    # 移除损坏的缓存条目
                     del self._cache[open_id]
             else:
-                logger.debug(f"Cache miss for user {open_id[:12]}...")
+                logger.debug(f"用户 {open_id[:12]}... 缓存未命中")
 
-            # Fetch from API
+            # 从API获取
             try:
                 user_info = await self._fetch_user_from_api(open_id)
             except Exception as e:
                 logger.error(
-                    f"Failed to fetch user info for {open_id[:8]}... from API: {e}. "
-                    f"Using fallback user info.",
+                    f"从API获取用户 {open_id[:8]}... 的信息失败: {e}。 "
+                    f"使用降级用户信息。",
                     exc_info=True,
                 )
                 user_info = self._create_fallback_user_info(open_id)
 
-            # Update cache
+            # 更新缓存
             try:
                 self._cache[open_id] = (user_info, time.time())
             except Exception as e:
-                logger.warning(f"Failed to update cache for user {open_id[:8]}...: {e}")
+                logger.warning(f"更新用户 {open_id[:8]}... 缓存失败: {e}")
 
             return user_info
 
         except Exception as e:
             logger.error(
-                f"Unexpected error in get_user_info for {open_id[:8] if open_id else 'unknown'}...: {e}",
+                f"在get_user_info中获取 {open_id[:8] if open_id else 'unknown'}... 的信息时发生意外错误: {e}",
                 exc_info=True,
             )
             return self._create_fallback_user_info(open_id if open_id else "unknown")
@@ -212,7 +212,7 @@ class UserInfoCache:
                     
                     for member in members:
                         try:
-                            # ListMember 对象有以下字段：
+                            # ListMember对象有以下字段：
                             # - member_id_type: str
                             # - member_id: str (这是我们需要的 open_id)
                             # - name: str (用户名称)
@@ -311,22 +311,22 @@ class UserInfoCache:
 
     async def batch_fetch_users(self, open_ids: list[str]) -> Dict[str, UserInfo]:
         """
-        Batch fetch multiple users.
+        批量获取多个用户。
 
-        This method fetches multiple users efficiently. It first checks the cache
-        for each user, then fetches missing users from the API. The Lark SDK
-        doesn't have a native batch API, so we fetch sequentially but efficiently.
+        此方法高效地获取多个用户。它首先检查每个用户的缓存，
+        然后从API获取缺失的用户。飞书SDK没有原生的批量API，
+        所以我们按顺序但高效地获取。
 
-        Args:
-            open_ids: List of user open_ids to fetch
+        参数:
+            open_ids: 要获取的用户open_id列表
 
-        Returns:
-            Dictionary mapping open_id to UserInfo
+        返回:
+            将open_id映射到UserInfo的字典
         """
         result: Dict[str, UserInfo] = {}
         to_fetch: list[str] = []
 
-        # Check cache for each user
+        # 检查每个用户的缓存
         for open_id in open_ids:
             if open_id in self._cache:
                 user_info, timestamp = self._cache[open_id]
@@ -334,29 +334,29 @@ class UserInfoCache:
 
                 if age < self._ttl:
                     result[open_id] = user_info
-                    logger.debug(f"Batch cache hit for user {open_id[:8]}...")
+                    logger.debug(f"批量缓存命中用户 {open_id[:8]}...")
                 else:
                     to_fetch.append(open_id)
             else:
                 to_fetch.append(open_id)
 
-        # Fetch missing users
+        # 获取缺失的用户
         if to_fetch:
-            logger.debug(f"Batch fetching {len(to_fetch)} users from API")
+            logger.debug(f"从API批量获取 {len(to_fetch)} 个用户")
 
             for open_id in to_fetch:
                 try:
                     user_info = await self._fetch_user_from_api(open_id)
                     result[open_id] = user_info
-                    # Cache is updated in _fetch_user_from_api
+                    # 缓存在_fetch_user_from_api中更新
                 except Exception as e:
-                    logger.error(f"Error in batch fetch for {open_id[:8]}...: {e}")
-                    # Use fallback
+                    logger.error(f"批量获取 {open_id[:8]}... 时出错: {e}")
+                    # 使用降级方案
                     user_info = self._create_fallback_user_info(open_id)
                     result[open_id] = user_info
                     self._cache[open_id] = (user_info, time.time())
 
-        logger.debug(f"Batch fetch complete: {len(result)} users retrieved")
+        logger.debug(f"批量获取完成: 获取了 {len(result)} 个用户")
         return result
 
     async def get_user_info_from_message(self, message) -> UserInfo:
@@ -426,55 +426,55 @@ class UserInfoCache:
             UserInfo对象（包含用户详情或降级数据）
         """
         try:
-            # Get client
+            # 获取客户端
             try:
                 client = self._client_manager.get_client()
             except Exception as e:
                 logger.error(
-                    f"Failed to get Lark client for fetching user {open_id[:8]}...: {e}",
+                    f"获取用于获取用户 {open_id[:8]}... 的飞书客户端失败: {e}",
                     exc_info=True,
                 )
                 return self._create_fallback_user_info(open_id)
 
-            # Import Lark SDK modules
+            # 导入飞书SDK模块
             try:
                 import lark_oapi  # noqa: F401
             except ImportError as e:
                 logger.error(
-                    f"Failed to import Lark SDK modules: {e}. "
-                    f"Please ensure lark_oapi is properly installed.",
+                    f"导入飞书SDK模块失败: {e}。 "
+                    f"请确保已正确安装 lark_oapi。",
                     exc_info=True,
                 )
                 return self._create_fallback_user_info(open_id)
 
-            # Try to get user info using im.v1.chat.members API (群成员信息)
-            # This is more reliable than contact.v3.user API for group chat scenarios
+            # 尝试使用 im.v1.chat.members API 获取用户信息（群成员信息）
+            # 对于群聊场景，这比 contact.v3.user API 更可靠
             try:
-                # First try: Use batch get chat members API
+                # 第一次尝试：使用批量获取群成员API
 
-                # Note: We need chat_id to use this API, but we don't have it here
-                # So we'll fall back to using a simpler approach
+                # 注意：我们需要 chat_id 才能使用此API，但在这里我们没有
+                # 所以我们将回退到使用更简单的方法
                 logger.debug(
-                    f"Attempting to fetch user info for {open_id[:8]}... using fallback method"
+                    f"尝试使用降级方法获取 {open_id[:8]}... 的用户信息"
                 )
 
             except Exception as e:
-                logger.debug(f"Batch API not available: {e}")
+                logger.debug(f"批量API不可用: {e}")
 
-            # Validate open_id format before making API call
-            # Valid user open_ids start with "ou_"
+            # 在进行API调用前验证open_id格式
+            # 有效的用户open_id以"ou_"开头
             if not open_id.startswith("ou_"):
                 logger.warning(
-                    f"Invalid open_id format: {open_id[:12]}... (should start with 'ou_'). "
-                    f"This might be an app_id or other type of ID."
+                    f"无效的open_id格式: {open_id[:12]}... (应以'ou_'开头)。 "
+                    f"这可能是app_id或其他类型的ID。"
                 )
                 return self._create_fallback_user_info(open_id)
 
-            # Use contact.v3.user API (requires contact:user.base:readonly permission)
+            # 使用 contact.v3.user API（需要 contact:user.base:readonly 权限）
             try:
                 from lark_oapi.api.contact.v3 import GetUserRequest
 
-                logger.debug(f"Fetching user info from Lark API for {open_id[:12]}...")
+                logger.debug(f"从飞书API获取 {open_id[:12]}... 的用户信息")
 
                 request = (
                     GetUserRequest.builder()
@@ -486,83 +486,83 @@ class UserInfoCache:
                 response = client.contact.v3.user.get(request)
 
                 logger.debug(
-                    f"API response for {open_id[:12]}...: success={response.success()}, code={response.code if hasattr(response, 'code') else 'N/A'}"
+                    f"{open_id[:12]}... 的API响应: 成功={response.success()}, 代码={response.code if hasattr(response, 'code') else 'N/A'}"
                 )
 
             except AttributeError as e:
                 logger.error(
-                    f"Lark client structure error when fetching user {open_id[:8]}...: {e}. "
-                    f"The client may not be properly initialized.",
+                    f"获取用户 {open_id[:8]}... 时飞书客户端结构错误: {e}。 "
+                    f"客户端可能未正确初始化。",
                     exc_info=True,
                 )
                 return self._create_fallback_user_info(open_id)
             except Exception as e:
                 logger.error(
-                    f"API call failed when fetching user {open_id[:8]}...: {e}. "
-                    f"This may be due to network issues or API rate limiting.",
+                    f"获取用户 {open_id[:8]}... 时API调用失败: {e}。 "
+                    f"这可能是由于网络问题或API限流。",
                     exc_info=True,
                 )
                 return self._create_fallback_user_info(open_id)
 
-            # Check if request was successful
+            # 检查请求是否成功
             if not response.success():
                 error_code = response.code if hasattr(response, "code") else "unknown"
                 error_msg = (
                     response.msg if hasattr(response, "msg") else "unknown error"
                 )
 
-                # Provide specific guidance based on error code
+                # 根据错误代码提供具体指导
                 if error_code == 99992351:
                     logger.warning(
-                        f"Lark API error for user {open_id[:12]}...: Invalid open_id or user not found. "
-                        f"Error code: {error_code}, message: {error_msg}"
+                        f"飞书API错误，用户 {open_id[:12]}...: 无效的open_id或用户未找到。 "
+                        f"错误代码: {error_code}, 消息: {error_msg}"
                     )
                 elif error_code == 99991663:
                     logger.warning(
-                        f"Lark API permission denied for user {open_id[:12]}...: "
-                        f"Missing 'contact:user.base:readonly' permission. "
-                        f"Please add this permission in Feishu Open Platform: https://open.feishu.cn/"
+                        f"飞书API权限被拒绝，用户 {open_id[:12]}...: "
+                        f"缺少 'contact:user.base:readonly' 权限。 "
+                        f"请在飞书开放平台添加此权限: https://open.feishu.cn/"
                     )
                 else:
                     logger.warning(
-                        f"Lark API returned error for user {open_id[:12]}...: "
-                        f"code={error_code}, msg={error_msg}. "
-                        f"The bot may not have permission to access user information."
+                        f"飞书API返回用户 {open_id[:12]}... 错误: "
+                        f"代码={error_code}, 消息={error_msg}。 "
+                        f"机器人可能没有权限访问用户信息。"
                     )
 
                 return self._create_fallback_user_info(open_id)
 
-            # Extract user data
+            # 提取用户数据
             try:
                 user = response.data.user
 
-                # Safely extract user fields
+                # 安全地提取用户字段
                 name = (
                     user.name
                     if hasattr(user, "name") and user.name
-                    else f"User_{open_id[:8]}"
+                    else f"用户{open_id[:8]}"
                 )
 
-                # Extract avatar URL - try different sizes
+                # 提取头像URL - 尝试不同尺寸
                 avatar_url = ""
                 if hasattr(user, "avatar") and user.avatar:
-                    # Try different avatar sizes (prefer larger ones for better quality)
+                    # 尝试不同的头像尺寸（优先选择更大的尺寸以获得更好的质量）
                     for size_attr in ["avatar_640", "avatar_240", "avatar_72"]:
                         if hasattr(user.avatar, size_attr):
                             url = getattr(user.avatar, size_attr)
                             if url:
                                 avatar_url = url
                                 logger.debug(
-                                    f"Found avatar URL ({size_attr}) for {open_id[:12]}..."
+                                    f"找到 {open_id[:12]}... 的头像URL ({size_attr})"
                                 )
                                 break
 
                     if not avatar_url:
                         logger.debug(
-                            f"No avatar URL found for {open_id[:12]}..., available attrs: {[a for a in dir(user.avatar) if not a.startswith('_')]}"
+                            f"未找到 {open_id[:12]}... 的头像URL, 可用属性: {[a for a in dir(user.avatar) if not a.startswith('_')]}"
                         )
                 else:
-                    logger.debug(f"User {open_id[:12]}... has no avatar attribute")
+                    logger.debug(f"用户 {open_id[:12]}... 没有头像属性")
 
                 en_name = (
                     user.en_name if hasattr(user, "en_name") and user.en_name else ""
@@ -573,48 +573,48 @@ class UserInfoCache:
                 )
 
                 logger.info(
-                    f"Fetched user info for {open_id[:12]}...: name={user_info.name}, has_avatar={bool(avatar_url)}"
+                    f"获取了 {open_id[:12]}... 的用户信息: 名称={user_info.name}, 有头像={bool(avatar_url)}"
                 )
                 if avatar_url:
                     logger.debug(
-                        f"Avatar URL for {open_id[:12]}...: {avatar_url[:80]}..."
+                        f"{open_id[:12]}... 的头像URL: {avatar_url[:80]}..."
                     )
                 return user_info
 
             except AttributeError as e:
                 logger.error(
-                    f"Failed to extract user data from response for {open_id[:8]}...: {e}",
+                    f"从响应中提取 {open_id[:8]}... 的用户数据失败: {e}",
                     exc_info=True,
                 )
                 return self._create_fallback_user_info(open_id)
 
         except Exception as e:
             logger.error(
-                f"Unexpected error fetching user info for {open_id[:8]}...: {e}",
+                f"获取 {open_id[:8]}... 的用户信息时发生意外错误: {e}",
                 exc_info=True,
             )
             return self._create_fallback_user_info(open_id)
 
     def clear_cache(self):
         """
-        Clear the entire cache.
+        清空整个缓存。
 
-        This method removes all cached user information. Useful for testing
-        or when you want to force fresh data from the API.
+        此方法移除所有缓存的用户信息。适用于测试
+        或当你想要强制从API获取新数据时。
         """
         try:
             cache_size = len(self._cache)
             self._cache.clear()
-            logger.info(f"Cache cleared: {cache_size} entries removed")
+            logger.info(f"缓存已清空: 移除了 {cache_size} 个条目")
         except Exception as e:
-            logger.error(f"Error clearing cache: {e}", exc_info=True)
+            logger.error(f"清空缓存时出错: {e}", exc_info=True)
 
     def get_cache_stats(self) -> Dict[str, int]:
         """
-        Get cache statistics.
+        获取缓存统计信息。
 
-        Returns:
-            Dictionary with cache statistics (size, expired count)
+        返回:
+            包含缓存统计信息的字典（大小、过期数量）
         """
         current_time = time.time()
         expired_count = sum(
@@ -698,7 +698,7 @@ class UserInfoCache:
             fallback_name = "未知用户"
 
         logger.debug(
-            f"Created fallback user info for {open_id[:12]}...: {fallback_name}"
+            f"为 {open_id[:12]}... 创建降级用户信息: {fallback_name}"
         )
 
         return UserInfo(open_id=open_id, name=fallback_name, avatar_url="", en_name="")

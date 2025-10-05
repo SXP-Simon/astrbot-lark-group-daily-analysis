@@ -1,7 +1,7 @@
 """
-Tests for analysis accuracy.
+分析准确性测试
 
-Tests Requirements: 4.2, 4.3, 4.4, 10.1, 10.2, 10.3, 10.4
+测试需求: 4.2, 4.3, 4.4, 10.1, 10.2, 10.3, 10.4
 """
 
 import asyncio
@@ -22,11 +22,11 @@ from src.models import ParsedMessage, Topic, UserTitle, Quote, Statistics
 
 
 class TestTopicsAnalyzer:
-    """Test topics analysis accuracy"""
+    """测试话题分析准确性"""
     
     @pytest.mark.asyncio
     async def test_topics_use_actual_names(self, sample_parsed_messages):
-        """Verify topics use actual usernames"""
+        """验证话题使用实际用户名"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -55,7 +55,7 @@ class TestTopicsAnalyzer:
     
     @pytest.mark.asyncio
     async def test_topics_are_detailed(self, sample_parsed_messages):
-        """Verify topics contain specific, detailed information"""
+        """验证话题包含具体、详细的信息"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -84,7 +84,7 @@ class TestTopicsAnalyzer:
     
     @pytest.mark.asyncio
     async def test_topics_handle_malformed_json(self, sample_parsed_messages):
-        """Verify topics analyzer handles malformed JSON gracefully"""
+        """验证话题分析器优雅地处理格式错误的JSON"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -100,11 +100,11 @@ class TestTopicsAnalyzer:
 
 
 class TestUsersAnalyzer:
-    """Test user analysis accuracy"""
+    """测试用户分析准确性"""
     
     @pytest.mark.asyncio
     async def test_users_use_actual_names(self, sample_parsed_messages):
-        """Verify user titles use actual nicknames"""
+        """验证用户称号使用实际昵称"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -144,7 +144,7 @@ class TestUsersAnalyzer:
     
     @pytest.mark.asyncio
     async def test_users_metrics_accurate(self, sample_parsed_messages):
-        """Verify user metrics are calculated accurately"""
+        """验证用户指标计算准确"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -168,7 +168,7 @@ class TestUsersAnalyzer:
     
     @pytest.mark.asyncio
     async def test_users_include_avatars(self, sample_parsed_messages):
-        """Verify user titles include avatar URLs"""
+        """验证用户称号包含头像URL"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -196,11 +196,11 @@ class TestUsersAnalyzer:
 
 
 class TestQuotesAnalyzer:
-    """Test quotes analysis accuracy"""
+    """测试金句分析准确性"""
     
     @pytest.mark.asyncio
     async def test_quotes_properly_attributed(self, sample_parsed_messages):
-        """Verify quotes are attributed to correct users"""
+        """验证金句正确归属到对应用户"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -228,7 +228,7 @@ class TestQuotesAnalyzer:
     
     @pytest.mark.asyncio
     async def test_quotes_include_avatars(self, sample_parsed_messages):
-        """Verify quotes include sender avatars"""
+        """验证金句包含发送者头像"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -255,7 +255,7 @@ class TestQuotesAnalyzer:
     
     @pytest.mark.asyncio
     async def test_quotes_have_reasons(self, sample_parsed_messages):
-        """Verify quotes include reasons for selection"""
+        """验证金句包含选择原因"""
         mock_context = Mock()
         mock_config = Mock()
         mock_config.get_llm_model.return_value = "gpt-4"
@@ -282,17 +282,17 @@ class TestQuotesAnalyzer:
 
 
 class TestStatisticsCalculator:
-    """Test statistics calculation accuracy"""
+    """测试统计数据计算准确性"""
     
     def test_statistics_message_count(self, sample_parsed_messages):
-        """Verify accurate message count"""
+        """验证准确的消息计数"""
         calculator = StatisticsCalculator()
         stats = calculator.calculate(sample_parsed_messages)
         
         assert stats.message_count == len(sample_parsed_messages)
     
     def test_statistics_char_count(self, sample_parsed_messages):
-        """Verify accurate character count"""
+        """验证准确的字符计数"""
         calculator = StatisticsCalculator()
         stats = calculator.calculate(sample_parsed_messages)
         
@@ -300,7 +300,7 @@ class TestStatisticsCalculator:
         assert stats.char_count == expected_chars
     
     def test_statistics_participant_count(self, sample_parsed_messages):
-        """Verify accurate participant count"""
+        """验证准确的参与者计数"""
         calculator = StatisticsCalculator()
         stats = calculator.calculate(sample_parsed_messages)
         
@@ -308,7 +308,7 @@ class TestStatisticsCalculator:
         assert stats.participant_count == unique_senders
     
     def test_statistics_hourly_distribution(self, sample_parsed_messages):
-        """Verify hourly distribution is calculated correctly"""
+        """验证小时分布计算正确"""
         calculator = StatisticsCalculator()
         stats = calculator.calculate(sample_parsed_messages)
         
@@ -319,7 +319,7 @@ class TestStatisticsCalculator:
         assert all(count > 0 for count in stats.hourly_distribution.values())
     
     def test_statistics_peak_hours(self, sample_parsed_messages):
-        """Verify peak hours are identified correctly"""
+        """验证高峰时段识别正确"""
         calculator = StatisticsCalculator()
         stats = calculator.calculate(sample_parsed_messages)
         
@@ -330,7 +330,7 @@ class TestStatisticsCalculator:
         assert all(0 <= hour <= 23 for hour in stats.peak_hours)
     
     def test_statistics_empty_messages(self):
-        """Verify statistics handle empty message list"""
+        """验证统计数据处理空消息列表"""
         calculator = StatisticsCalculator()
         stats = calculator.calculate([])
         

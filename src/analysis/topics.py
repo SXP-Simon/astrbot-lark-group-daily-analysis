@@ -116,13 +116,13 @@ class TopicsAnalyzer:
 
         formatted_messages = []
         for msg in messages:
-            # Convert timestamp to readable time
+            # 转换时间戳为可读时间
             time_str = datetime.fromtimestamp(msg.timestamp).strftime("%H:%M")
 
-            # Clean message content
+            # 清理消息内容
             content = self._clean_message_content(msg.content)
 
-            # Format: [HH:MM] Username: content
+            # 格式: [HH:MM] 用户名: 内容
             formatted_messages.append(f"[{time_str}] {msg.sender_name}: {content}")
 
         return "\n".join(formatted_messages)
@@ -137,15 +137,15 @@ class TopicsAnalyzer:
         Returns:
             清理后的内容
         """
-        # Replace Chinese quotes with English quotes
+        # 将中文引号替换为英文引号
         content = content.replace('"', '"').replace('"', '"')
         content = content.replace(""", "'").replace(""", "'")
 
-        # Remove or replace special characters
+        # 移除或替换特殊字符
         content = content.replace("\n", " ").replace("\r", " ")
         content = content.replace("\t", " ")
 
-        # Remove control characters
+        # 移除控制字符
         content = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", content)
 
         return content.strip()
@@ -222,54 +222,54 @@ class TopicsAnalyzer:
             Topic对象列表
         """
         try:
-            # Try to extract JSON
+            # 尝试提取JSON
             json_match = re.search(r"\[.*?\]", result_text, re.DOTALL)
             if json_match:
                 json_text = json_match.group()
-                logger.debug(f"Topics analysis JSON raw: {json_text[:500]}...")
+                logger.debug(f"话题分析JSON原始数据: {json_text[:500]}...")
 
-                # Fix and clean JSON
+                # 修复并清理JSON
                 json_text = self._fix_json(json_text)
-                logger.debug(f"Fixed JSON: {json_text[:300]}...")
+                logger.debug(f"修复后的JSON: {json_text[:300]}...")
 
                 topics_data = json.loads(json_text)
                 topics = []
                 for topic_dict in topics_data[:max_topics]:
-                    # Map old field names to new Topic model
+                    # 将旧字段名映射到新的Topic模型
                     topic = Topic(
                         title=topic_dict.get("topic", ""),
                         participants=topic_dict.get("contributors", []),
                         description=topic_dict.get("detail", ""),
-                        message_count=0,  # Will be calculated later if needed
+                        message_count=0,  # 如果需要，稍后计算
                     )
                     topics.append(topic)
 
-                logger.info(f"Successfully parsed {len(topics)} topics")
+                logger.info(f"成功解析 {len(topics)} 个话题")
                 return topics
             else:
                 logger.warning(
-                    f"No JSON format found in response: {result_text[:200]}..."
+                    f"响应中未找到JSON格式: {result_text[:200]}..."
                 )
         except json.JSONDecodeError as e:
-            logger.error(f"Topics analysis JSON parsing failed: {e}")
+            logger.error(f"话题分析JSON解析失败: {e}")
             logger.debug(
-                f"Fixed JSON: {json_text if 'json_text' in locals() else 'N/A'}"
+                f"修复后的JSON: {json_text if 'json_text' in locals() else 'N/A'}"
             )
             logger.debug(f"Raw response: {result_text}")
 
-            # Fallback: try regex extraction
+            # 降级方案：尝试正则表达式提取
             topics = self._extract_topics_with_regex(result_text, max_topics)
             if topics:
-                logger.info(f"Regex extraction successful: {len(topics)} topics")
+                logger.info(f"正则表达式提取成功: {len(topics)} 个话题")
                 return topics
             else:
-                # Final fallback
-                logger.info("Regex extraction failed, using default topic")
+                # 最终降级方案
+                logger.info("正则表达式提取失败，使用默认话题")
                 return [
                     Topic(
-                        title="Group Discussion",
-                        participants=["Group Members"],
-                        description="Today's group chat covered various topics with rich content",
+                        title="群组讨论",
+                        participants=["群成员"],
+                        description="今日群聊涵盖了多个话题，由于分析错误无法提取详细话题信息",
                         message_count=0,
                     )
                 ]
@@ -286,32 +286,32 @@ class TopicsAnalyzer:
         Returns:
             修复后的JSON文本
         """
-        # Remove markdown code block markers
+        # 移除markdown代码块标记
         text = re.sub(r"```json\s*", "", text)
         text = re.sub(r"```\s*", "", text)
 
-        # Basic cleaning
+        # 基础清理
         text = text.replace("\n", " ").replace("\r", " ")
         text = re.sub(r"\s+", " ", text)
 
-        # Replace Chinese quotes with English quotes
+        # 将中文引号替换为英文引号
         text = text.replace('"', '"').replace('"', '"')
         text = text.replace(""", "'").replace(""", "'")
 
-        # Fix truncated JSON
+        # 修复截断的JSON
         if not text.endswith("]"):
             last_complete = text.rfind("}")
             if last_complete > 0:
                 text = text[: last_complete + 1] + "]"
 
-        # Fix common JSON format issues
-        # 1. Fix missing commas between objects
+        # 修复常见JSON格式问题
+        # 1. 修复对象之间缺少的逗号
         text = re.sub(r"}\s*{", "}, {", text)
 
-        # 2. Ensure field names have quotes
+        # 2. 确保字段名有引号
         text = re.sub(r"([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:", r'\1"\2":', text)
 
-        # 3. Remove extra commas
+        # 3. 移除多余的逗号
         text = re.sub(r",\s*}", "}", text)
         text = re.sub(r",\s*]", "]", text)
 
@@ -333,12 +333,12 @@ class TopicsAnalyzer:
         try:
             topics = []
 
-            # Regex pattern to match topic objects
+            # 匹配话题对象的正则表达式模式
             topic_pattern = r'\{\s*"topic":\s*"([^"]+)"\s*,\s*"contributors":\s*\[([^\]]+)\]\s*,\s*"detail":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
             matches = re.findall(topic_pattern, result_text, re.DOTALL)
 
             if not matches:
-                # Try more lenient matching
+                # 尝试更宽松的匹配
                 topic_pattern = r'"topic":\s*"([^"]+)"[^}]*"contributors":\s*\[([^\]]+)\][^}]*"detail":\s*"([^"]*(?:\\.[^"]*)*)"'
                 matches = re.findall(topic_pattern, result_text, re.DOTALL)
 
@@ -347,23 +347,23 @@ class TopicsAnalyzer:
                 contributors_str = match[1].strip()
                 detail = match[2].strip()
 
-                # Clean escaped characters in detail
+                # 清理detail中的转义字符
                 detail = (
                     detail.replace('\\"', '"').replace("\\n", " ").replace("\\t", " ")
                 )
 
-                # Parse contributors list
+                # 解析参与者列表
                 contributors = []
                 for contrib in re.findall(r'"([^"]+)"', contributors_str):
                     contributors.append(contrib.strip())
 
                 if not contributors:
-                    contributors = ["Group Members"]
+                    contributors = ["群成员"]
 
                 topics.append(
                     Topic(
                         title=topic_name,
-                        participants=contributors[:5],  # Max 5 participants
+                        participants=contributors[:5],  # 最多5个参与者
                         description=detail,
                         message_count=0,
                     )
