@@ -78,3 +78,29 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 - 安装依赖，首次使用命令安装，最后出现提示告诉你需要重启生效，是对的，需要重启 astrbot，而不是热重载插件。
 - 例如：`/安装PDF`
 
+## 飞书权限
+
+飞书开放平台 -> 企业自建应用 -> 权限管理 -> 批量导入权限
+
+希望满足权限最小化可以进行精简，下面是可以跑通的版本
+
+```json
+{
+  "scopes": {
+    "tenant": [
+      "im:chat:read",
+      "im:chat:readonly",
+      "contact:contact.base:readonly",
+      "contact:user.base:readonly",
+      "im:message",
+      "im:message.group_at_msg:readonly",
+      "im:message.group_msg",
+      "im:message.p2p_msg:readonly",
+      "im:message:readonly",
+      "im:message:send_as_bot",
+      "im:resource"
+    ],
+    "user": []
+  }
+}
+```
