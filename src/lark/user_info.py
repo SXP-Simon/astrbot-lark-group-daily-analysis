@@ -267,6 +267,7 @@ class UserInfoCache:
             if result:
                 logger.info(f"尝试获取 {len(result)} 个成员的头像...")
                 avatar_count = 0
+                failed_users = []
                 
                 for open_id, user_info in result.items():
                     try:
@@ -278,15 +279,29 @@ class UserInfoCache:
                             # 更新缓存
                             self._cache[open_id] = (user_info, time.time())
                             avatar_count += 1
+                        else:
+                            failed_users.append(open_id)
                     except Exception as e:
-                        # 获取头像失败不影响整体流程
+                        # 获取头像失败，记录但不影响整体流程
                         logger.debug(f"获取用户 {open_id[:12]}... 的头像失败: {e}")
+                        failed_users.append(open_id)
                         continue
                 
                 if avatar_count > 0:
                     logger.info(f"✅ 成功获取 {avatar_count}/{len(result)} 个成员的头像")
                 else:
-                    logger.info(f"⚠️ 未能获取成员头像（可能缺少 contact:user.base:readonly 权限）")
+                    logger.info(f"⚠️ 未能获取成员头像（用户不在应用可见范围内）")
+                
+                # 为没有头像的用户生成默认头像
+                if failed_users:
+                    logger.info(f"为 {len(failed_users)} 个用户使用默认头像方案")
+                    for open_id in failed_users:
+                        if open_id in result:
+                            user_info = result[open_id]
+                            # 使用用户名首字母生成头像URL（使用第三方服务）
+                            user_info.avatar_url = self._generate_avatar_url(user_info.name, open_id)
+                            # 更新缓存
+                            self._cache[open_id] = (user_info, time.time())
             
             return result
             
@@ -614,6 +629,51 @@ class UserInfoCache:
             "valid": len(self._cache) - expired_count,
         }
 
+    def _generate_avatar_url(self, name: str, open_id: str) -> str:
+        """
+        为用户生成默认头像URL
+        
+        使用第三方头像生成服务，基于用户名生成个性化头像
+        
+        Args:
+            name: 用户名
+            open_id: 用户ID
+            
+        Returns:
+            头像URL
+        """
+        try:
+            # 方案1: 使用 UI Avatars 服务（免费、稳定）
+            # 提取用户名的首字母或前两个字符
+            import urllib.parse
+            
+            # 获取用户名的前2个字符作为头像文字
+            if len(name) >= 2:
+                avatar_text = name[:2]
+            elif len(name) == 1:
+                avatar_text = name
+            else:
+                # 使用open_id的一部分
+                avatar_text = open_id[3:5].upper() if len(open_id) > 5 else "U"
+            
+            # URL编码
+            encoded_text = urllib.parse.quote(avatar_text)
+            
+            # 生成颜色（基于open_id的哈希值）
+            color_hash = hash(open_id) % 16777215  # 0xFFFFFF
+            bg_color = f"{color_hash:06x}"
+            
+            # UI Avatars API: https://ui-avatars.com/
+            avatar_url = f"https://ui-avatars.com/api/?name={encoded_text}&background={bg_color}&color=fff&size=128&bold=true"
+            
+            logger.debug(f"为用户 {name} 生成默认头像: {avatar_url}")
+            return avatar_url
+            
+        except Exception as e:
+            logger.warning(f"生成默认头像失败: {e}")
+            # 返回一个简单的默认头像
+            return "https://ui-avatars.com/api/?name=U&background=random&size=128"
+    
     def _create_fallback_user_info(self, open_id: str) -> UserInfo:
         """
         创建降级用户信息（当 API 获取失败时使用）
