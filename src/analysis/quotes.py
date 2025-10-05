@@ -75,6 +75,9 @@ class QuotesAnalyzer:
 
             # 解析响应
             result_text = self.llm_helper.extract_response_text(response)
+            logger.info(f"=== 金句提取LLM完整响应 ===")
+            logger.info(result_text)
+            logger.info(f"=== 响应结束 ===")
             logger.debug(f"金句分析原始响应（前500字符）: {result_text[:500]}...")
 
             # Parse JSON and create Quote objects
@@ -163,11 +166,14 @@ class QuotesAnalyzer:
             f"URL={filtered_stats['starts_with_url']}, 表情过多={filtered_stats['too_many_emojis']}"
         )
 
-        # 如果通过的消息太少，输出一些示例
-        if filtered_stats["passed"] < 10:
-            logger.info("通过过滤的消息示例（前3条）:")
-            for i, msg in enumerate(quality_messages[:3]):
-                logger.info(f"  {i + 1}. [{msg.sender_name}] {msg.content[:80]}...")
+        # 输出一些示例消息
+        logger.info("通过过滤的消息示例（前3条）:")
+        for i, msg in enumerate(quality_messages[:3]):
+            logger.info(f"  {i + 1}. [{msg.sender_name}] {msg.content[:80]}...")
+        
+        # 如果通过的消息太少，给出警告
+        if filtered_stats["passed"] < 5:
+            logger.warning(f"⚠️ 通过过滤的消息太少（{filtered_stats['passed']}条），可能无法提取有效金句")
 
         return quality_messages
 
@@ -268,7 +274,7 @@ class QuotesAnalyzer:
 - 选择真正有趣或令人难忘的金句
 - 包含说这句话的真实用户名
 - 为每个金句提供具体的选择理由
-- 注重质量而非数量 - 如果没有足够好的金句，返回较少的也可以
+- 注重质量而非数量 - 如果没有足够好的金句，返回较少的也可以，但是一定要有至少一句。
 
 请严格按照以下 JSON 格式返回：
 [
