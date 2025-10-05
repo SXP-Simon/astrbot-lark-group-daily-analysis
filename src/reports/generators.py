@@ -99,6 +99,12 @@ class ReportGenerator:
 
         # 准备渲染数据并生成HTML内容
         render_data = self._prepare_render_data(analysis_result)
+
+        # 将用户头像URL转换为base64（用于PDF）
+        render_data = await self._convert_avatars_to_base64(
+            render_data, analysis_result
+        )
+
         html_content = self._render_html_template(
             HTMLTemplates.get_pdf_template(), render_data, use_jinja_style=False
         )
@@ -482,6 +488,96 @@ class ReportGenerator:
             logger.warning(f"未替换的占位符: {remaining_placeholders[:10]}")
 
         return result
+
+    async def _convert_avatars_to_base64(
+        self, render_data: Dict, analysis_result: AnalysisResult
+    ) -> Dict:
+        """将用户头像URL转换为base64编码（用于PDF生成）
+
+        Args:
+            render_data: 渲染数据字典
+            analysis_result: 分析结果对象
+
+        Returns:
+            更新后的渲染数据字典
+        """
+        try:
+            import aiohttp
+            import base64
+
+            user_titles = (
+                analysis_result.user_titles if analysis_result.user_titles else []
+            )
+            if not user_titles:
+                return render_data
+
+            # 重新生成用户称号HTML，使用base64编码的头像
+            titles_html = ""
+            max_user_titles = self.config_manager.get_max_user_titles()
+
+            for title in user_titles[:max_user_titles]:
+                # 下载并转换头像为base64
+                avatar_html = '<div class="user-avatar-placeholder">👤</div>'
+                if title.avatar_url:
+                    try:
+                        logger.debug(
+                            f"下载用户头像: {title.name} - {title.avatar_url[:80]}..."
+                        )
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(
+                                title.avatar_url, timeout=aiohttp.ClientTimeout(total=5)
+                            ) as resp:
+                                if resp.status == 200:
+                                    image_data = await resp.read()
+                                    # 转换为base64
+                                    base64_image = base64.b64encode(image_data).decode(
+                                        "utf-8"
+                                    )
+                                    # 检测图片类型
+                                    content_type = resp.headers.get(
+                                        "Content-Type", "image/jpeg"
+                                    )
+                                    avatar_html = f'<img src="data:{content_type};base64,{base64_image}" class="user-avatar" alt="头像">'
+                                    logger.debug(f"头像转换成功: {title.name}")
+                                else:
+                                    logger.warning(
+                                        f"下载头像失败: {title.name} - HTTP {resp.status}"
+                                    )
+                    except Exception as e:
+                        logger.warning(f"转换头像失败: {title.name} - {e}")
+
+                # 安全获取用户信息
+                user_name = title.name if title.name else "未知用户"
+                user_title = title.title if title.title else "无称号"
+                user_mbti = title.mbti if title.mbti else "N/A"
+                user_reason = title.reason if title.reason else "暂无说明"
+
+                titles_html += f"""
+                <div class="user-title">
+                    <div class="user-info">
+                        {avatar_html}
+                        <div class="user-details">
+                            <div class="user-name">{user_name}</div>
+                            <div class="user-badges">
+                                <div class="user-title-badge">{user_title}</div>
+                                <div class="user-mbti">{user_mbti}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="user-reason">{user_reason}</div>
+                </div>
+                """
+
+            # 更新渲染数据
+            render_data["titles_html"] = titles_html
+            logger.info(
+                f"成功转换 {len(user_titles[:max_user_titles])} 个用户头像为base64"
+            )
+
+        except Exception as e:
+            logger.error(f"转换头像为base64失败: {e}", exc_info=True)
+
+        return render_data
 
     async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
         """将 HTML 内容转换为 PDF 文件"""
