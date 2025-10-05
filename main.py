@@ -272,6 +272,58 @@ class LarkGroupDailyAnalysis(Star):
         except Exception as e:
             logger.error(f"插件资源清理失败: {e}", exc_info=True)
 
+    @filter.command("测试群成员")
+    async def test_chat_members(self, event: LarkMessageEvent):
+        """
+        测试获取群成员列表功能
+        用法: /测试群成员
+        """
+        # 检查插件是否可用
+        if lark_client_manager is None or not lark_client_manager.is_available():
+            yield event.plain_result("❌ 插件未启用：未找到 Lark 平台适配器")
+            return
+
+        if not isinstance(event, LarkMessageEvent):
+            yield event.plain_result("❌ 此功能仅支持飞书群聊")
+            return
+
+        group_id = event.get_group_id()
+        if not group_id:
+            yield event.plain_result("❌ 请在群聊中使用此命令")
+            return
+
+        try:
+            yield event.plain_result("🔍 正在获取群成员列表...")
+            
+            # 获取群成员
+            members = await user_info_cache.fetch_chat_members(group_id)
+            
+            if not members:
+                yield event.plain_result("❌ 未能获取群成员列表，请检查权限配置")
+                return
+            
+            # 显示结果
+            result = [f"✅ 成功获取 {len(members)} 个群成员：\n"]
+            
+            # 统计有头像的成员数量
+            avatar_count = sum(1 for user_info in members.values() if user_info.avatar_url)
+            
+            # 显示前10个成员作为示例
+            for i, (open_id, user_info) in enumerate(list(members.items())[:10]):
+                avatar_status = "🖼️" if user_info.avatar_url else "❌"
+                result.append(f"{i+1}. {user_info.name} ({open_id[:12]}...) {avatar_status}")
+            
+            if len(members) > 10:
+                result.append(f"\n... 还有 {len(members) - 10} 个成员")
+            
+            result.append(f"\n📊 头像获取情况: {avatar_count}/{len(members)} 个成员有头像")
+            
+            yield event.plain_result("\n".join(result))
+            
+        except Exception as e:
+            logger.error(f"测试群成员功能失败: {e}", exc_info=True)
+            yield event.plain_result(f"❌ 测试失败: {e}")
+
     @filter.command("历史消息示例")
 
     async def show_history_example(self, event: LarkMessageEvent, days: int = 1):
@@ -297,6 +349,14 @@ class LarkGroupDailyAnalysis(Star):
             return
 
         try:
+            # 预先获取群成员信息
+            try:
+                members = await user_info_cache.fetch_chat_members(group_id)
+                if members:
+                    logger.info(f"获取到 {len(members)} 个群成员信息")
+            except Exception as e:
+                logger.debug(f"获取群成员列表失败: {e}")
+            
             # 使用新架构获取消息
             raw_messages = await message_fetcher.fetch_messages(
                 chat_id=group_id, days=days, max_messages=20, container_id_type="chat"
@@ -373,6 +433,17 @@ class LarkGroupDailyAnalysis(Star):
         logger.info(f"当前输出格式配置: {config_manager.get_output_format()}")
 
         try:
+            # 步骤0: 预先获取群成员信息（提高用户名识别准确度）
+            try:
+                logger.info(f"开始获取群 {group_id} 的成员列表...")
+                members = await user_info_cache.fetch_chat_members(group_id)
+                if members:
+                    logger.info(f"✅ 成功获取 {len(members)} 个群成员信息，已缓存")
+                else:
+                    logger.warning("⚠️ 未能获取群成员列表，将使用降级方案")
+            except Exception as e:
+                logger.warning(f"获取群成员列表失败: {e}，将使用降级方案")
+            
             # 步骤1: 使用新的消息获取器获取原始消息
             raw_messages = await message_fetcher.fetch_messages(
                 chat_id=group_id,

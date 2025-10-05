@@ -131,6 +131,169 @@ class UserInfoCache:
             )
             return self._create_fallback_user_info(open_id if open_id else "unknown")
 
+    async def fetch_chat_members(self, chat_id: str, fetch_avatars: bool = False) -> Dict[str, UserInfo]:
+        """
+        获取群聊中所有成员的信息（推荐用于群聊场景）
+        
+        使用群成员列表API，可以获取群内所有成员，不受通讯录可见范围限制。
+        需要权限：im:chat:read 或 im:chat:readonly
+        
+        Args:
+            chat_id: 群聊ID
+            fetch_avatars: 是否额外获取头像（需要 contact:user.base:readonly 权限）
+            
+        Returns:
+            字典，映射 open_id 到 UserInfo
+        """
+        result: Dict[str, UserInfo] = {}
+        
+        try:
+            client = self._client_manager.get_client()
+            
+            # 导入群成员API
+            try:
+                from lark_oapi.api.im.v1 import GetChatMembersRequest
+            except ImportError as e:
+                logger.error(f"无法导入飞书SDK模块: {e}")
+                return result
+            
+            # 分页获取群成员
+            page_token = None
+            page_count = 0
+            
+            logger.info(f"开始获取群 {chat_id} 的成员列表")
+            
+            while True:
+                page_count += 1
+                
+                # 构建请求
+                req_builder = (
+                    GetChatMembersRequest.builder()
+                    .chat_id(chat_id)
+                    .member_id_type("open_id")
+                    .page_size(100)
+                )
+                
+                if page_token:
+                    req_builder = req_builder.page_token(page_token)
+                
+                request = req_builder.build()
+                
+                # 调用API
+                logger.debug(f"获取群成员列表（第{page_count}页）")
+                
+                try:
+                    # 使用同步调用（飞书SDK的chat_members.get是同步方法）
+                    response = client.im.v1.chat_members.get(request)
+                except Exception as e:
+                    logger.error(f"获取群成员列表API调用失败: {e}", exc_info=True)
+                    break
+                
+                if not response.success():
+                    error_code = response.code if hasattr(response, 'code') else 'unknown'
+                    error_msg = response.msg if hasattr(response, 'msg') else 'unknown'
+                    
+                    logger.error(
+                        f"获取群成员列表失败: code={error_code}, msg={error_msg}"
+                    )
+                    
+                    # 提供具体的错误提示
+                    if error_code == 99991663:
+                        logger.error("权限不足！需要 im:chat:read 或 im:chat:readonly 权限")
+                    elif error_code == 230002:
+                        logger.error("群聊不存在或机器人不在群内")
+                    
+                    break
+                
+                # 提取成员信息
+                try:
+                    members = response.data.items or []
+                    logger.info(f"第{page_count}页: 获取到{len(members)}个成员")
+                    
+                    for member in members:
+                        try:
+                            # ListMember 对象有以下字段：
+                            # - member_id_type: str
+                            # - member_id: str (这是我们需要的 open_id)
+                            # - name: str (用户名称)
+                            # - tenant_key: str
+                            
+                            open_id = member.member_id if member.member_id else None
+                            if not open_id:
+                                logger.debug(f"成员没有member_id")
+                                continue
+                            
+                            # 提取成员名称
+                            name = member.name if member.name else None
+                            
+                            if not name:
+                                # 使用降级名称
+                                name = f"用户{open_id[3:8]}" if open_id.startswith("ou_") else f"用户{open_id[:5]}"
+                            
+                            # 创建UserInfo
+                            user_info = UserInfo(
+                                open_id=open_id,
+                                name=name,
+                                avatar_url="",  # 群成员API不返回头像
+                                en_name=""
+                            )
+                            
+                            result[open_id] = user_info
+                            # 更新缓存
+                            self._cache[open_id] = (user_info, time.time())
+                            
+                            # 调试：显示前几个成员
+                            if len(result) <= 3:
+                                logger.debug(f"成员 {len(result)}: {name} ({open_id[:12]}...)")
+                            
+                        except Exception as e:
+                            logger.warning(f"处理群成员信息时出错: {e}", exc_info=True)
+                            continue
+                    
+                except Exception as e:
+                    logger.error(f"提取成员信息失败: {e}", exc_info=True)
+                    break
+                
+                # 检查是否还有更多页
+                if not hasattr(response.data, 'has_more') or not response.data.has_more:
+                    logger.debug("没有更多页面")
+                    break
+                
+                page_token = response.data.page_token
+            
+            logger.info(f"从群 {chat_id} 获取了 {len(result)} 个成员信息")
+            
+            # 尝试批量获取头像（使用通讯录API）
+            if result:
+                logger.info(f"尝试获取 {len(result)} 个成员的头像...")
+                avatar_count = 0
+                
+                for open_id, user_info in result.items():
+                    try:
+                        # 尝试从通讯录API获取详细信息（包含头像）
+                        detailed_info = await self._fetch_user_from_api(open_id)
+                        if detailed_info and detailed_info.avatar_url:
+                            # 更新头像信息
+                            user_info.avatar_url = detailed_info.avatar_url
+                            # 更新缓存
+                            self._cache[open_id] = (user_info, time.time())
+                            avatar_count += 1
+                    except Exception as e:
+                        # 获取头像失败不影响整体流程
+                        logger.debug(f"获取用户 {open_id[:12]}... 的头像失败: {e}")
+                        continue
+                
+                if avatar_count > 0:
+                    logger.info(f"✅ 成功获取 {avatar_count}/{len(result)} 个成员的头像")
+                else:
+                    logger.info(f"⚠️ 未能获取成员头像（可能缺少 contact:user.base:readonly 权限）")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"获取群成员列表时出错: {e}", exc_info=True)
+            return result
+
     async def batch_fetch_users(self, open_ids: list[str]) -> Dict[str, UserInfo]:
         """
         Batch fetch multiple users.
@@ -181,18 +344,71 @@ class UserInfoCache:
         logger.debug(f"Batch fetch complete: {len(result)} users retrieved")
         return result
 
+    async def get_user_info_from_message(self, message) -> UserInfo:
+        """
+        从消息对象中提取用户信息（推荐方法）
+        
+        飞书消息对象中包含发送者的基本信息，直接使用可以避免额外的API调用
+        和权限限制问题
+        
+        Args:
+            message: 飞书消息对象
+            
+        Returns:
+            UserInfo对象
+        """
+        try:
+            if not hasattr(message, 'sender'):
+                logger.warning("消息对象没有sender字段")
+                return self._create_fallback_user_info("unknown")
+            
+            sender = message.sender
+            open_id = sender.id if hasattr(sender, 'id') else "unknown"
+            
+            # 检查缓存
+            if open_id in self._cache:
+                user_info, timestamp = self._cache[open_id]
+                if time.time() - timestamp < self._ttl:
+                    return user_info
+            
+            # 从sender中提取信息
+            # 飞书消息的sender包含：id, id_type, sender_type, tenant_key
+            # 但不包含用户名，所以还是需要调用API或使用降级方案
+            
+            # 尝试从配置的映射中获取
+            if open_id in self._user_name_mapping:
+                custom_name = self._user_name_mapping[open_id]
+                user_info = UserInfo(
+                    open_id=open_id, name=custom_name, avatar_url="", en_name=""
+                )
+                self._cache[open_id] = (user_info, time.time())
+                return user_info
+            
+            # 尝试从API获取
+            try:
+                user_info = await self._fetch_user_from_api(open_id)
+                return user_info
+            except Exception as e:
+                logger.debug(f"从API获取用户信息失败: {e}，使用降级方案")
+                return self._create_fallback_user_info(open_id)
+                
+        except Exception as e:
+            logger.error(f"从消息中提取用户信息失败: {e}", exc_info=True)
+            return self._create_fallback_user_info("unknown")
+
     async def _fetch_user_from_api(self, open_id: str) -> UserInfo:
         """
-        Fetch user information from Lark API.
-
-        This method uses the Lark SDK to fetch user details. If the fetch fails,
-        it returns a fallback UserInfo with a generic name.
+        从飞书API获取用户信息
+        
+        注意：此方法需要 contact:user.base:readonly 权限，
+        且只能获取应用可见范围内的用户信息。
+        如果获取失败，会返回降级的UserInfo。
 
         Args:
-            open_id: User's open_id
+            open_id: 用户的open_id
 
         Returns:
-            UserInfo object with user details or fallback data
+            UserInfo对象（包含用户详情或降级数据）
         """
         try:
             # Get client
