@@ -30,13 +30,7 @@
         "type": "bool",
         "description": "启用定时自动分析",
         "default": false,
-        "hint": "是否在指定时间自动进行群聊分析，启用需要填写下面的机器人ID，并且确保群聊ID在 enabled_groups 配置中，否则获取不到实例，不会自动分析"
-    },
-    "bot_open_id": {
-        "type": "string",
-        "description": "机器人Open ID",
-        "default": "",
-        "hint": "用于自动分析的飞书机器人Open ID，填写后可启用自动分析功能"
+        "hint": "是否在指定时间自动进行群聊分析，使用请确保群聊ID在 enabled_groups 配置中，在需要启用的群聊使用 \"/分析设置 enable\" 命令"
     },
     "output_format": {
         "type": "string",
