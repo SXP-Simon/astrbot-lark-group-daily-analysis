@@ -250,7 +250,7 @@ class HTMLTemplates:
             </div>
         </div>
         <div class="footer">
-            由 AstrBot QQ群日常分析插件 生成 | {{ current_datetime }} | SXP-Simon/astrbot-qq-group-daily-analysis<br>
+            由 AstrBot 飞书群日常分析插件 生成 | {{ current_datetime }} | SXP-Simon/astrbot-飞书-group-daily-analysis<br>
             <small style="opacity: 0.8; font-size: 0.9em;">🤖 AI分析消耗：{{ total_tokens }} tokens (输入: {{ prompt_tokens }}, 输出: {{ completion_tokens }})</small>
         </div>
     </div>
@@ -412,7 +412,7 @@ class HTMLTemplates:
             {quotes_html}
         </div>
         <div class="footer">
-            由 AstrBot QQ群日常分析插件 生成 | {current_datetime} | SXP-Simon/astrbot-qq-group-daily-analysis<br>
+            由 AstrBot 飞书群日常分析插件 生成 | {current_datetime} | SXP-Simon/astrbot-飞书-group-daily-analysis<br>
             <small style="opacity: 0.8; font-size: 0.9em;">🤖 AI分析消耗：{total_tokens} tokens (输入: {prompt_tokens}, 输出: {completion_tokens})</small>
         </div>
     </div>
